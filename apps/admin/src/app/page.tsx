@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { moneyCompact, money, number, useApi } from '@/lib/api';
 import { Shell, useRequireAuth } from '@/components/shell';
 import {
-  BarChart,
+  LineChart,
   Card,
   DonutChart,
   ErrorNote,
@@ -78,9 +78,9 @@ export default function DashboardPage() {
 
           <div className="grid gap-5 lg:grid-cols-3">
             <Card className="lg:col-span-2" padded={false}>
-              <SectionHeader title="GMV trend" subtitle="Daily, last 30 days" />
+              <SectionHeader title="GMV trend" subtitle="Last 30 days, in 3-day periods" />
               <div className="p-5">
-                <BarChart points={data.gmvTrend} />
+                <LineChart points={data.gmvTrend} />
               </div>
             </Card>
 

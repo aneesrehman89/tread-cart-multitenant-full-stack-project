@@ -81,12 +81,19 @@ curl -X POST http://localhost:4000/v1/auth/login \
 
 Seeded logins, password `Treadcart!2345`:
 
-| Tenant | Owner | Catalog manager |
+| Account | Email | Signs in where |
 | --- | --- | --- |
-| _platform console_ | `admin@treadcart.test` | — |
-| `apexauto` (tires) | `owner@apexauto.test` | `catalog@apexauto.test` |
-| `wheelworks` (wheels) | `owner@wheelworks.test` | `catalog@wheelworks.test` |
-| `torquelab` (suspended) | `owner@torquelab.test` | `catalog@torquelab.test` |
+| Ahmed Raza (platform admin) | `admin@treadcart.test` | Admin console, <http://localhost:3002> |
+| Imran Qureshi (Apex Auto owner) | `owner@apexauto.test` | API only — no store UI yet |
+| Sadia Nawaz (Apex Auto catalog) | `catalog@apexauto.test` | API only |
+| Tariq Mehmood (WheelWorks owner) | `owner@wheelworks.test` | API only |
+| Mariam Aslam (WheelWorks catalog) | `catalog@wheelworks.test` | API only |
+| Owais Farooq (Torque Lab owner) | `owner@torquelab.test` | API only — store is suspended |
+
+**Only `admin@treadcart.test` can sign in to the console.** The store accounts
+are tenant-scoped and the console rejects them by design; the seller dashboard
+that would use them is not built yet. Test those accounts against the API —
+see [Testing the store logins](#testing-the-store-logins).
 
 Group pricing, on the same catalog call:
 
@@ -182,6 +189,101 @@ accent, green-tinted neutrals, and semantic status colours kept separate from
 the brand so order status stays readable. Each store's own
 `brandPrimary`/`brandAccent` are editable on the store Settings tab, with a
 live storefront preview.
+
+## Testing the store logins
+
+The store accounts (`owner@apexauto.test` and friends) have no UI yet — the
+admin console is platform-only. Exercise them against the API directly. Every
+tenant-scoped call needs an `X-Tenant-Slug` header saying which store it is
+for; that is what picks the database.
+
+**1. Sign in as a store owner.** Note the tenant header:
+
+```bash
+curl -s -X POST http://localhost:4000/v1/auth/login -H "X-Tenant-Slug: apexauto" -H "Content-Type: application/json" -d '{"email":"owner@apexauto.test","password":"Treadcart!2345"}'
+```
+
+That returns an opaque `token` plus the role and its permissions. Save it:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:4000/v1/auth/login -H "X-Tenant-Slug: apexauto" -H "Content-Type: application/json" -d '{"email":"owner@apexauto.test","password":"Treadcart!2345"}' | jq -r .token)
+```
+
+**2. Confirm who you are:**
+
+```bash
+curl -s http://localhost:4000/v1/auth/me -H "X-Tenant-Slug: apexauto" -H "Authorization: Bearer $TOKEN"
+```
+
+**3. Prove the tenant isolation.** The same URL returns different catalogs,
+because each store reads its own database — tires from one, wheels from the other:
+
+```bash
+curl -s "http://localhost:4000/v1/catalog/products" -H "X-Tenant-Slug: apexauto"
+```
+
+```bash
+curl -s "http://localhost:4000/v1/catalog/products" -H "X-Tenant-Slug: wheelworks"
+```
+
+**4. Prove a session cannot cross stores.** Replaying the Apex Auto token
+against WheelWorks returns 403, not data:
+
+```bash
+curl -s http://localhost:4000/v1/auth/me -H "X-Tenant-Slug: wheelworks" -H "Authorization: Bearer $TOKEN"
+```
+
+**5. Prove RBAC.** A catalog manager may write inventory; sign in as
+`catalog@apexauto.test` and the same call succeeds, while `READ_ONLY` or
+`SUPPORT` roles get a 403 naming the missing permission:
+
+```bash
+curl -s -X PUT "http://localhost:4000/v1/catalog/skus/<SKU_ID>/stock" -H "X-Tenant-Slug: apexauto" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"onHand":25,"reorderAt":8}'
+```
+
+Get a real `<SKU_ID>` from the products call in step 3, or from psql:
+
+```bash
+docker exec treadcart-postgres psql -U treadcart -d treadcart_t_apexauto -c "SELECT id, sku FROM \"Sku\";"
+```
+
+**6. Prove group pricing.** Pass a customer group and the resolved price
+changes, with a `reason` explaining which rule won:
+
+```bash
+docker exec treadcart-postgres psql -U treadcart -d treadcart_t_apexauto -c "SELECT id, code FROM \"CustomerGroup\";"
+```
+
+```bash
+curl -s "http://localhost:4000/v1/catalog/products?groupId=<TRADE_GROUP_ID>" -H "X-Tenant-Slug: apexauto"
+```
+
+**7. Suspended stores are refused.** Torque Lab is seeded as `SUSPENDED`:
+
+```bash
+curl -s http://localhost:4000/v1/catalog/products -H "X-Tenant-Slug: torquelab"
+```
+
+### Poking at the databases
+
+Postgres is on **5433** and Redis on **6380** so they cannot collide with any
+local installs. Those ports are only how *you* reach them from the host —
+inside Docker the containers still use 5432 and 6379.
+
+```bash
+docker exec -it treadcart-postgres psql -U treadcart -d treadcart_control -c "\l"
+```
+
+```bash
+docker exec -it treadcart-postgres psql -U treadcart -d treadcart_t_apexauto -c "\dt"
+```
+
+A GUI client connects with host `localhost`, port `5433`, user `treadcart`,
+password `treadcart`. Redis:
+
+```bash
+docker exec -it treadcart-redis redis-cli --scan --pattern 't:*'
+```
 
 ## Not built yet
 

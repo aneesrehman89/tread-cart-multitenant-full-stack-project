@@ -41,7 +41,76 @@ supportRouter.get(
       take: 100,
     });
 
-    res.json({ tickets, openCount: tickets.length });
+    // Counts are for the whole queue, not the filtered view, so the header
+    // does not change every time someone types in the search box.
+    const [queueCount, unassignedCount] = await Promise.all([
+      controlDb.supportTicket.count({ where: { status: { notIn: ['CLOSED', 'RESOLVED'] } } }),
+      controlDb.supportTicket.count({
+        where: { status: { notIn: ['CLOSED', 'RESOLVED'] }, assigneeId: null },
+      }),
+    ]);
+
+    res.json({ tickets, matchCount: tickets.length, queueCount, unassignedCount });
+  }),
+);
+
+/** Assignee options for the ticket header: platform staff only. */
+supportRouter.get(
+  '/assignees',
+  asyncHandler(async (_req, res) => {
+    const staff = await controlDb.staffUser.findMany({
+      where: { role: 'PLATFORM_ADMIN', isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ assignees: staff });
+  }),
+);
+
+const createSchema = z.object({
+  subject: z.string().min(1).max(200),
+  tenantSlug: z.string().min(1),
+  requesterName: z.string().min(1).max(120),
+  requesterEmail: z.string().email(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
+  slaHours: z.coerce.number().int().min(1).max(720).default(24),
+  body: z.string().min(1).max(5000),
+});
+
+supportRouter.post(
+  '/tickets',
+  asyncHandler(async (req, res) => {
+    const body = createSchema.parse(req.body);
+
+    const tenant = await controlDb.tenant.findUnique({ where: { slug: body.tenantSlug } });
+    if (!tenant) throw notFound(`No store with slug "${body.tenantSlug}"`);
+
+    // Continue from the highest number already issued, so new tickets sort
+    // after the existing ones instead of restarting from the base.
+    const latest = await controlDb.supportTicket.findFirst({
+      orderBy: { number: 'desc' },
+      select: { number: true },
+    });
+    const highest = Number.parseInt(latest?.number.replace(/\D/g, '') ?? '', 10);
+    const number = `TC-${(Number.isFinite(highest) ? highest : 10_000) + 1}`;
+
+    const ticket = await controlDb.supportTicket.create({
+      data: {
+        number,
+        subject: body.subject,
+        tenantId: tenant.id,
+        requesterName: body.requesterName,
+        requesterEmail: body.requesterEmail,
+        priority: body.priority,
+        status: 'OPEN',
+        slaDueAt: new Date(Date.now() + body.slaHours * 3_600_000),
+        messages: {
+          create: { fromStaff: false, authorName: body.requesterName, body: body.body },
+        },
+      },
+    });
+
+    res.status(201).json(ticket);
   }),
 );
 
@@ -104,6 +173,16 @@ supportRouter.patch(
   '/tickets/:id',
   asyncHandler(async (req, res) => {
     const body = patchSchema.parse(req.body);
+
+    // Only platform staff can own a ticket; a store user must not be assigned
+    // one, since the queue spans every store.
+    if (body.assigneeId) {
+      const assignee = await controlDb.staffUser.findFirst({
+        where: { id: body.assigneeId, role: 'PLATFORM_ADMIN', isActive: true },
+      });
+      if (!assignee) throw notFound('That assignee is not an active platform admin');
+    }
+
     const ticket = await controlDb.supportTicket.update({
       where: { id: req.params.id! },
       data: body,

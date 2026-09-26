@@ -155,80 +155,100 @@ async function seedTenantData(databaseUrl: string, flavour: 'tires' | 'wheels'):
       });
     }
 
-    await db.customer.upsert({
-      where: { email: 'trade@example.com' },
-      create: {
-        email: 'trade@example.com',
-        firstName: 'Dana',
-        lastName: 'Ortiz',
-        groupId: trade.id,
-      },
-      update: {},
-    });
-    const retailCustomer = await db.customer.upsert({
-      where: { email: 'retail@example.com' },
-      create: { email: 'retail@example.com', firstName: 'Sam', lastName: 'Lee', groupId: retail.id },
-      update: {},
-    });
+    const customers: { email: string; first: string; last: string; groupId: string }[] = [
+      { email: 'zainab.malik@example.com', first: 'Zainab', last: 'Malik', groupId: trade.id },
+      { email: 'ali.hassan@example.com', first: 'Ali', last: 'Hassan', groupId: retail.id },
+      { email: 'hamza.sheikh@example.com', first: 'Hamza', last: 'Sheikh', groupId: fleet.id },
+      { email: 'sana.iqbal@example.com', first: 'Sana', last: 'Iqbal', groupId: retail.id },
+      { email: 'daniel.roy@example.com', first: 'Daniel', last: 'Roy', groupId: retail.id },
+    ];
 
-    await seedOrders(db, retailCustomer.id);
+    const created = [];
+    for (const c of customers) {
+      created.push(
+        await db.customer.upsert({
+          where: { email: c.email },
+          create: { email: c.email, firstName: c.first, lastName: c.last, groupId: c.groupId },
+          // Update too, so re-running the seed corrects existing rows.
+          update: { firstName: c.first, lastName: c.last, groupId: c.groupId },
+        }),
+      );
+    }
+
+    // Drop demo customers left behind by an earlier version of this seed, so
+    // re-running it converges on exactly the list above.
+    await db.customer.deleteMany({ where: { email: { notIn: customers.map((c) => c.email) } } });
+
+    await seedOrders(db, created);
   } finally {
     await db.$disconnect();
   }
 }
 
+/** How many orders each store gets. Small enough that the lists stay readable. */
+const ORDERS_PER_TENANT = 10;
+
 /**
- * Spreads orders over the last 60 days so the dashboard trend chart and its
- * period-over-period deltas have something real to read.
+ * Spreads a handful of orders over the last 60 days, weighted towards the
+ * recent half so the dashboard's month-over-month deltas are positive and the
+ * trend line has shape.
  */
-async function seedOrders(db: TenantPrismaClient, customerId: string): Promise<void> {
-  if ((await db.order.count()) > 0) return;
+async function seedOrders(
+  db: TenantPrismaClient,
+  customers: { id: string; email: string }[],
+): Promise<void> {
+  // Rebuild every run, so changing ORDERS_PER_TENANT actually takes effect.
+  await db.orderItem.deleteMany();
+  await db.orderEvent.deleteMany();
+  await db.order.deleteMany();
 
   const skus = await db.sku.findMany({ include: { product: true } });
-  if (skus.length === 0) return;
+  if (skus.length === 0 || customers.length === 0) return;
 
   const statuses = ['DELIVERED', 'DELIVERED', 'SHIPPED', 'PAID', 'FULFILLING', 'CANCELLED'] as const;
   const DAY = 24 * 60 * 60 * 1000;
 
-  for (let day = 59; day >= 0; day -= 1) {
-    // More orders in the recent window than the one before it, so the
-    // month-over-month deltas come out positive.
-    const weight = day < 30 ? 1.6 : 1;
-    const count = Math.round((0.6 + Math.sin(day / 4) * 0.4 + Math.random() * 0.8) * weight);
+  // Two thirds land in the last 30 days, the rest in the 30 before that.
+  const recentCount = Math.ceil(ORDERS_PER_TENANT * 0.65);
 
-    for (let n = 0; n < count; n += 1) {
-      const sku = skus[Math.floor(Math.random() * skus.length)]!;
-      const quantity = [1, 2, 4, 4][Math.floor(Math.random() * 4)]!;
-      const subtotal = sku.basePriceCents * quantity;
-      const tax = Math.round(subtotal * 0.0825);
-      const shipping = subtotal > 50_000 ? 0 : 1_995;
-      const createdAt = new Date(Date.now() - day * DAY - Math.random() * DAY);
-      const status = statuses[Math.floor(Math.random() * statuses.length)]!;
+  for (let i = 0; i < ORDERS_PER_TENANT; i += 1) {
+    const isRecent = i < recentCount;
+    const dayOffset = isRecent
+      ? Math.floor((i / Math.max(recentCount, 1)) * 29)
+      : 30 + Math.floor(((i - recentCount) / Math.max(ORDERS_PER_TENANT - recentCount, 1)) * 29);
 
-      await db.order.create({
-        data: {
-          number: `TC-${String(Date.now()).slice(-6)}${Math.floor(Math.random() * 900 + 100)}`,
-          status,
-          customerId,
-          email: 'retail@example.com',
-          subtotalCents: subtotal,
-          taxCents: tax,
-          shippingCents: shipping,
-          totalCents: subtotal + tax + shipping,
-          createdAt,
-          paidAt: status === 'CANCELLED' ? null : createdAt,
-          items: {
-            create: {
-              skuId: sku.id,
-              quantity,
-              unitPriceCents: sku.basePriceCents,
-              listPriceCents: sku.basePriceCents,
-              nameSnapshot: sku.product.name,
-            },
+    const sku = skus[i % skus.length]!;
+    const customer = customers[i % customers.length]!;
+    const quantity = [1, 2, 4, 4][i % 4]!;
+    const subtotal = sku.basePriceCents * quantity;
+    const tax = Math.round(subtotal * 0.0825);
+    const shipping = subtotal > 50_000 ? 0 : 1_995;
+    const createdAt = new Date(Date.now() - dayOffset * DAY - Math.random() * DAY);
+    const status = statuses[i % statuses.length]!;
+
+    await db.order.create({
+      data: {
+        number: `TC-${String(100_000 + i * 7 + Math.floor(Math.random() * 900))}`,
+        status,
+        customerId: customer.id,
+        email: customer.email,
+        subtotalCents: subtotal,
+        taxCents: tax,
+        shippingCents: shipping,
+        totalCents: subtotal + tax + shipping,
+        createdAt,
+        paidAt: status === 'CANCELLED' ? null : createdAt,
+        items: {
+          create: {
+            skuId: sku.id,
+            quantity,
+            unitPriceCents: sku.basePriceCents,
+            listPriceCents: sku.basePriceCents,
+            nameSnapshot: sku.product.name,
           },
         },
-      });
-    }
+      },
+    });
   }
 }
 
@@ -239,72 +259,78 @@ async function seedPlatformOps(adminId: string): Promise<void> {
   );
   const HOUR = 60 * 60 * 1000;
 
+  // Demo content is rebuilt each run so edits to the fixtures below take
+  // effect. Anything a reviewer typed into the console is thrown away with it.
+  await controlDb.ticketMessage.deleteMany();
+  await controlDb.supportTicket.deleteMany();
+  await controlDb.platformBanner.deleteMany();
+
   const tickets = [
     {
       number: 'TC-10482',
       subject: 'Refund not received',
       tenantSlug: 'apexauto',
-      requesterName: 'Rhea Kapoor',
-      requesterEmail: 'rhea@example.com',
+      requesterName: 'Ayesha Siddiqui',
+      requesterEmail: 'ayesha.siddiqui@example.com',
       status: 'ESCALATED' as const,
       priority: 'URGENT' as const,
       slaHours: 2,
       messages: [
-        { fromStaff: false, author: 'Rhea Kapoor', body: 'I was told my refund would be processed in 5 days and I still have not received it.' },
-        { fromStaff: true, author: 'Alex Mercer', body: 'Sorry for the delay — I can see the refund was approved on the store side. Escalating to payments now.' },
+        { fromStaff: false, author: 'Ayesha Siddiqui', body: 'I was told my refund would be processed in 5 days and I still have not received it.' },
+        { fromStaff: true, author: 'Ahmed Raza', body: 'Sorry for the delay — I can see the refund was approved on the store side. Escalating to payments now.' },
       ],
     },
     {
       number: 'TC-10483',
       subject: 'Store not accepting orders',
       tenantSlug: 'wheelworks',
-      requesterName: 'Karan Mehta',
-      requesterEmail: 'karan@example.com',
+      requesterName: 'Bilal Ahmed',
+      requesterEmail: 'bilal.ahmed@example.com',
       status: 'OPEN' as const,
       priority: 'HIGH' as const,
       slaHours: 4,
       messages: [
-        { fromStaff: false, author: 'Karan Mehta', body: 'Checkout returns an error for every customer since this morning.' },
+        { fromStaff: false, author: 'Bilal Ahmed', body: 'Checkout returns an error for every customer since this morning.' },
       ],
     },
     {
       number: 'TC-10484',
       subject: 'Wrong tire size delivered',
       tenantSlug: 'apexauto',
-      requesterName: 'Nisha Verma',
-      requesterEmail: 'nisha@example.com',
+      requesterName: 'Fatima Khan',
+      requesterEmail: 'fatima.khan@example.com',
       status: 'PENDING' as const,
       priority: 'MEDIUM' as const,
       slaHours: 18,
       messages: [
-        { fromStaff: false, author: 'Nisha Verma', body: 'I ordered 225/45R17 and received 235/40R18.' },
-        { fromStaff: true, author: 'Alex Mercer', body: 'Apologies — arranging a pickup and a replacement at no charge.' },
+        { fromStaff: false, author: 'Fatima Khan', body: 'I ordered 225/45R17 and received 235/40R18.' },
+        { fromStaff: true, author: 'Ahmed Raza', body: 'Apologies — arranging a pickup and a replacement at no charge.' },
       ],
     },
     {
       number: 'TC-10485',
       subject: 'Fitment data looks wrong for 2021 Civic',
       tenantSlug: 'wheelworks',
-      requesterName: 'Arjun Das',
-      requesterEmail: 'arjun@example.com',
+      requesterName: 'Usman Tariq',
+      requesterEmail: 'usman.tariq@example.com',
       status: 'OPEN' as const,
       priority: 'LOW' as const,
       slaHours: 36,
       messages: [
-        { fromStaff: false, author: 'Arjun Das', body: 'The catalog shows a 5x114.3 wheel fitting a car that is 5x100.' },
+        { fromStaff: false, author: 'Usman Tariq', body: 'The catalog shows a 5x114.3 wheel fitting a car that is 5x100.' },
       ],
     },
     {
       number: 'TC-10486',
       subject: 'Payment deducted twice',
       tenantSlug: 'apexauto',
-      requesterName: 'Meera Pillai',
-      requesterEmail: 'meera@example.com',
+      requesterName: 'Hina Abbas',
+      requesterEmail: 'hina.abbas@example.com',
       status: 'ESCALATED' as const,
       priority: 'URGENT' as const,
       slaHours: 1,
       messages: [
-        { fromStaff: false, author: 'Meera Pillai', body: 'My card was charged twice for order TC-884120.' },
+        { fromStaff: false, author: 'Hina Abbas', body: 'My card was charged twice for order TC-884120.' },
       ],
     },
   ];
@@ -312,7 +338,6 @@ async function seedPlatformOps(adminId: string): Promise<void> {
   for (const t of tickets) {
     const tenantId = tenantBySlug.get(t.tenantSlug);
     if (!tenantId) continue;
-    if (await controlDb.supportTicket.findUnique({ where: { number: t.number } })) continue;
 
     await controlDb.supportTicket.create({
       data: {
@@ -349,8 +374,6 @@ async function seedPlatformOps(adminId: string): Promise<void> {
   ];
 
   for (const b of banners) {
-    const exists = await controlDb.platformBanner.findFirst({ where: { title: b.title } });
-    if (exists) continue;
     const DAY = 24 * HOUR;
     await controlDb.platformBanner.create({
       data: {
@@ -379,13 +402,13 @@ async function main(): Promise<void> {
   const platformAdmin = existingAdmin
     ? await controlDb.staffUser.update({
         where: { id: existingAdmin.id },
-        data: { passwordHash, role: 'PLATFORM_ADMIN' },
+        data: { passwordHash, role: 'PLATFORM_ADMIN', name: 'Ahmed Raza' },
       })
     : await controlDb.staffUser.create({
         data: {
           email: 'admin@treadcart.test',
           passwordHash,
-          name: 'Alex Mercer',
+          name: 'Ahmed Raza',
           role: 'PLATFORM_ADMIN',
           tenantId: null,
         },
@@ -393,11 +416,14 @@ async function main(): Promise<void> {
 
   const tenants = [
     { slug: 'apexauto', name: 'Apex Auto', host: 'apexauto.localhost', flavour: 'tires' as const,
-      brandPrimary: '#0F5132', brandAccent: '#84CC16' },
+      brandPrimary: '#0F5132', brandAccent: '#84CC16',
+      owner: 'Imran Qureshi', catalogManager: 'Sadia Nawaz' },
     { slug: 'wheelworks', name: 'WheelWorks', host: 'wheelworks.localhost', flavour: 'wheels' as const,
-      brandPrimary: '#1E3A8A', brandAccent: '#38BDF8' },
+      brandPrimary: '#1E3A8A', brandAccent: '#38BDF8',
+      owner: 'Tariq Mehmood', catalogManager: 'Mariam Aslam' },
     { slug: 'torquelab', name: 'Torque Lab', host: 'torquelab.localhost', flavour: 'wheels' as const,
-      brandPrimary: '#7C2D12', brandAccent: '#F59E0B' },
+      brandPrimary: '#7C2D12', brandAccent: '#F59E0B',
+      owner: 'Owais Farooq', catalogManager: 'Laura Bennett' },
   ];
 
   for (const t of tenants) {
@@ -414,11 +440,12 @@ async function main(): Promise<void> {
       create: {
         email: `owner@${t.slug}.test`,
         passwordHash,
-        name: `${t.name} Owner`,
+        name: t.owner,
         role: 'TENANT_OWNER',
         tenantId: id,
       },
-      update: { passwordHash },
+      // Names are updated too, so re-running the seed corrects existing rows.
+      update: { passwordHash, name: t.owner },
     });
 
     await controlDb.staffUser.upsert({
@@ -426,11 +453,11 @@ async function main(): Promise<void> {
       create: {
         email: `catalog@${t.slug}.test`,
         passwordHash,
-        name: `${t.name} Catalog Manager`,
+        name: t.catalogManager,
         role: 'CATALOG_MANAGER',
         tenantId: id,
       },
-      update: { passwordHash },
+      update: { passwordHash, name: t.catalogManager },
     });
 
     await seedTenantData(databaseUrl, t.flavour);

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { moneyCompact, number as fmtNumber } from '@/lib/api';
 
 // --- surfaces -------------------------------------------------------------
@@ -295,37 +295,141 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
 // --- charts ---------------------------------------------------------------
 
 /**
- * GMV trend. Inline SVG rather than a chart library: it is one series with no
- * interaction beyond a tooltip, and a dependency would cost more than it saves.
+ * GMV trend as a line with a soft area fill. Inline SVG rather than a chart
+ * library: it is one series, and a dependency would cost more than it saves.
+ *
+ * The SVG uses a fixed viewBox and `preserveAspectRatio="none"` so it stretches
+ * to the container; stroke widths are therefore set in a non-scaling way via
+ * vector-effect so the line does not distort with the container width.
  */
-export function BarChart({ points }: { points: { date: string; cents: number }[] }) {
+export function LineChart({ points }: { points: { date: string; cents: number }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+
   if (points.length === 0) return <EmptyState title="No revenue in this window" />;
 
+  const W = 600;
+  const H = 180;
+  const PAD_Y = 12;
+
   const max = Math.max(...points.map((p) => p.cents), 1);
+  const stepX = points.length > 1 ? W / (points.length - 1) : 0;
+
+  const xy = points.map((p, i) => ({
+    x: i * stepX,
+    y: H - PAD_Y - (p.cents / max) * (H - PAD_Y * 2),
+    ...p,
+  }));
+
+  const line = xy.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area = `${line} L${W},${H} L0,${H} Z`;
+  const active = hover !== null ? xy[hover] : null;
 
   return (
-    <div className="flex h-48 items-end gap-1" role="img" aria-label="Revenue trend, last 30 days">
-      {points.map((p, i) => {
-        const pct = (p.cents / max) * 100;
-        const isLast = i === points.length - 1;
-        return (
-          // The wrapper must be full height, or the bar's percentage height
-          // resolves against an auto-height parent and collapses to nothing.
-          <div key={p.date} className="group relative flex h-full flex-1 items-end">
-            <div
-              className={`w-full rounded-t transition-colors ${isLast ? 'bg-brand-600' : 'bg-brand-200 group-hover:bg-brand-400'}`}
-              style={{ height: `${Math.max(pct, 2)}%` }}
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="h-48 w-full overflow-visible"
+        role="img"
+        aria-label="Revenue trend, last 30 days"
+        onMouseLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id="gmvFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1F6B46" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#1F6B46" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Horizontal gridlines at quarters of the max. */}
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+          const y = H - PAD_Y - f * (H - PAD_Y * 2);
+          return (
+            <line
+              key={f}
+              x1="0"
+              x2={W}
+              y1={y}
+              y2={y}
+              stroke="#E2E6E0"
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
             />
-            <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-2xs text-white group-hover:block">
-              {new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              {' · '}
-              {moneyCompact(p.cents)}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+
+        <path d={area} fill="url(#gmvFill)" />
+        <path
+          d={line}
+          fill="none"
+          stroke="#1F6B46"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+
+        {active && (
+          <line
+            x1={active.x}
+            x2={active.x}
+            y1="0"
+            y2={H}
+            stroke="#9AA397"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+
+        {/* Invisible wide hit areas: the line itself is far too thin to hover. */}
+        {xy.map((p, i) => (
+          <rect
+            key={p.date}
+            x={p.x - stepX / 2}
+            y={0}
+            width={stepX || W}
+            height={H}
+            fill="transparent"
+            onMouseEnter={() => setHover(i)}
+          />
+        ))}
+
+        {active && (
+          <circle
+            cx={active.x}
+            cy={active.y}
+            r="4"
+            fill="#FFFFFF"
+            stroke="#1F6B46"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+            style={{ transformBox: 'fill-box' }}
+          />
+        )}
+      </svg>
+
+      {active && (
+        <div
+          className="pointer-events-none absolute -top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-2xs text-white"
+          style={{ left: `${(active.x / W) * 100}%` }}
+        >
+          {new Date(active.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          {' · '}
+          {moneyCompact(active.cents)}
+        </div>
+      )}
+
+      <div className="mt-2 flex justify-between text-2xs text-ink-400">
+        <span>{formatDay(points[0]!.date)}</span>
+        <span>{formatDay(points[points.length - 1]!.date)}</span>
+      </div>
     </div>
   );
+}
+
+function formatDay(date: string): string {
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 /** Orders-by-status donut, drawn with stroke-dasharray arcs. */

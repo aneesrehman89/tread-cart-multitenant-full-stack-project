@@ -68,15 +68,28 @@ metricsRouter.get(
       const orderCount = sum((v) => v.orderCount);
       const prevOrderCount = sum((v) => v.prevOrderCount);
 
-      // Merge every tenant's per-day totals into one 30-point series.
+      // Merge every tenant's orders into a trend series.
+      //
+      // Bucketed into multi-day periods rather than single days: at this order
+      // volume a daily series is mostly zeros with isolated spikes, which reads
+      // as noise instead of a trend. Each point is the total for BUCKET_DAYS.
+      const BUCKET_DAYS = 3;
+      const bucketCount = Math.ceil(30 / BUCKET_DAYS);
       const buckets = new Map<string, number>();
-      for (let i = 29; i >= 0; i -= 1) {
-        buckets.set(new Date(now - i * DAY_MS).toISOString().slice(0, 10), 0);
+
+      // Key each bucket by the date it starts on.
+      for (let i = bucketCount - 1; i >= 0; i -= 1) {
+        const start = now - (i + 1) * BUCKET_DAYS * DAY_MS + DAY_MS;
+        buckets.set(new Date(start).toISOString().slice(0, 10), 0);
       }
+      const bucketKeys = [...buckets.keys()];
+
       for (const row of perTenant) {
         for (const order of row.value?.daily ?? []) {
-          const key = new Date(order.createdAt).toISOString().slice(0, 10);
-          if (buckets.has(key)) buckets.set(key, buckets.get(key)! + order.totalCents);
+          const ageDays = Math.floor((now - new Date(order.createdAt).getTime()) / DAY_MS);
+          const index = bucketCount - 1 - Math.floor(ageDays / BUCKET_DAYS);
+          const key = bucketKeys[index];
+          if (key !== undefined) buckets.set(key, buckets.get(key)! + order.totalCents);
         }
       }
 
