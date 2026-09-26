@@ -5,7 +5,8 @@
  *   pnpm --filter @treadcart/api tenant:provision -- \
  *     --slug wheelworks --name "WheelWorks" --host wheelworks.localhost
  */
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // @ts-expect-error - plain .mjs helper shared with the Prisma npm scripts
@@ -15,6 +16,8 @@ import { env } from '../config/env.js';
 import { controlDb } from '../db/control.js';
 import { invalidateTenantLookup } from '../middleware/tenant.js';
 import { logger } from '../lib/logger.js';
+
+const execFileAsync = promisify(execFile);
 
 const apiRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -70,7 +73,11 @@ export async function provisionTenant(opts: {
   // `db push` is right for a skeleton; before production switch this to
   // `prisma migrate deploy` so every tenant DB advances through the same
   // reviewed migration history and schemaVersion below means something.
-  execFileSync(
+  // Awaited, not execFileSync: this runs inside an HTTP request when a
+  // platform admin approves a seller, and a synchronous spawn would block the
+  // whole Node event loop for the ~10s the push takes, freezing every other
+  // request the API is serving.
+  await execFileAsync(
     process.execPath,
     [
       resolvePrismaCli(apiRoot),
@@ -83,7 +90,7 @@ export async function provisionTenant(opts: {
     {
       cwd: apiRoot,
       env: { ...process.env, TENANT_DATABASE_URL: databaseUrl },
-      stdio: 'inherit',
+      maxBuffer: 10 * 1024 * 1024,
     },
   );
 

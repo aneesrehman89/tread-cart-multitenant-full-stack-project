@@ -4,32 +4,43 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, initials, useApi } from '@/lib/api';
-import { Avatar } from './ui';
+import { Avatar, Pill, titleCase } from './ui';
 
-interface Me {
+export interface SellerMe {
   id: string;
   name: string;
   email: string;
   role: string;
+  permissions: string[];
+  store: {
+    slug: string;
+    name: string;
+    status: string;
+    brandPrimary: string;
+    brandAccent: string;
+    logoUrl: string | null;
+  };
 }
 
+/**
+ * Nav entries carry the permission that gates their screen, so a catalog
+ * editor never sees an Orders link that would 403 when clicked.
+ */
 const NAV = [
-  { href: '/', label: 'Dashboard', icon: IconGrid },
-  { href: '/stores', label: 'Stores', icon: IconStore },
-  { href: '/applications', label: 'Seller applications', icon: IconInbox },
-  { href: '/catalog', label: 'Global catalog', icon: IconTag },
-  { href: '/customers', label: 'Customers', icon: IconUser },
-  { href: '/orders', label: 'Orders', icon: IconBag },
-  { href: '/support', label: 'Support', icon: IconChat },
-  { href: '/marketing', label: 'Marketing', icon: IconSend },
-  { href: '/users', label: 'Users & permissions', icon: IconShield },
-  { href: '/account', label: 'My account', icon: IconCog },
-];
+  { href: '/', label: 'Dashboard', icon: IconGrid, permission: 'order:read' },
+  { href: '/products', label: 'Products', icon: IconTag, permission: 'catalog:read' },
+  { href: '/orders', label: 'Orders', icon: IconBag, permission: 'order:read' },
+  { href: '/customers', label: 'Customers', icon: IconUser, permission: 'customer:read' },
+  { href: '/pricing', label: 'Pricing groups', icon: IconPrice, permission: 'pricing:read' },
+  { href: '/reports', label: 'Reports', icon: IconChart, permission: 'order:read' },
+  { href: '/settings', label: 'Storefront settings', icon: IconCog, permission: 'catalog:read' },
+  { href: '/staff', label: 'Staff & roles', icon: IconShield, permission: 'staff:manage' },
+] as const;
 
 export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrumb?: string[] }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: me } = useApi<Me>('auth/me');
+  const { data: me } = useApi<SellerMe>('auth/me');
   const [signingOut, setSigningOut] = useState(false);
 
   async function signOut() {
@@ -41,19 +52,26 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
     }
   }
 
+  const allowed = NAV.filter((n) => !me || me.permissions.includes(n.permission));
+
   return (
     <div className="flex min-h-screen bg-canvas">
-      {/* Sidebar */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-gradient-to-b from-brand-800 to-brand-950 lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent-500 text-xs font-bold text-brand-950">
-            T
+          {/* The store's own brand colour, not the platform's. */}
+          <span
+            className="grid h-7 w-7 place-items-center rounded-lg text-xs font-bold text-white"
+            style={{ backgroundColor: me?.store.brandAccent ?? '#84CC16' }}
+          >
+            {me ? initials(me.store.name) : 'TC'}
           </span>
-          <span className="text-sm font-semibold text-white">TreadCart</span>
+          <span className="truncate text-sm font-semibold text-white">
+            {me?.store.name ?? 'TreadCart'}
+          </span>
         </div>
 
         <nav className="flex-1 space-y-0.5 px-3 py-2">
-          {NAV.map((item) => {
+          {allowed.map((item) => {
             const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
@@ -78,7 +96,9 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
             <Avatar label={me ? initials(me.name) : '··'} color="#84CC16" size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium text-white">{me?.name ?? 'Loading'}</p>
-              <p className="truncate text-2xs text-brand-200">Platform admin</p>
+              <p className="truncate text-2xs text-brand-200">
+                {me ? titleCase(me.role) : ''}
+              </p>
             </div>
             <button
               onClick={signOut}
@@ -92,11 +112,10 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
         </div>
       </aside>
 
-      {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-ink-200 bg-surface/95 px-6 py-3 backdrop-blur">
           <nav className="flex items-center gap-1.5 text-xs text-ink-500">
-            <span>TreadCart</span>
+            <span>{me?.store.name ?? 'Store'}</span>
             {(breadcrumb ?? []).map((crumb) => (
               <span key={crumb} className="flex items-center gap-1.5">
                 <IconChevron />
@@ -106,10 +125,8 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
-            <span className="hidden rounded-lg bg-ink-100 px-2.5 py-1 text-2xs font-medium text-ink-600 sm:inline">
-              Marketplace
-            </span>
-            <Avatar label={me ? initials(me.name) : '··'} size="sm" />
+            {me && <Pill tone={me.store.status === 'ACTIVE' ? 'success' : 'danger'}>{titleCase(me.store.status)}</Pill>}
+            <Avatar label={me ? initials(me.name) : '··'} size="sm" color={me?.store.brandPrimary} />
           </div>
         </header>
 
@@ -120,7 +137,7 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
 }
 
 /** Bounces to /login when the session cookie is missing or has expired. */
-export function useRequireAuth() {
+export function useRequireSeller() {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
 
@@ -132,8 +149,6 @@ export function useRequireAuth() {
 
   return checked;
 }
-
-// --- icons (inline so the app pulls in no icon dependency) ----------------
 
 const ICON = 'h-4 w-4 shrink-0';
 
@@ -147,34 +162,11 @@ function IconGrid() {
     </svg>
   );
 }
-function IconStore() {
-  return (
-    <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z" />
-      <path d="M3 7l1.5-4h11L17 7" />
-    </svg>
-  );
-}
-function IconInbox() {
-  return (
-    <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M3 11h4l1 2h4l1-2h4M3 11l2-6h10l2 6v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5Z" />
-    </svg>
-  );
-}
 function IconTag() {
   return (
     <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M3 3h6l8 8-6 6-8-8V3Z" />
       <circle cx="6.5" cy="6.5" r="1.2" />
-    </svg>
-  );
-}
-function IconUser() {
-  return (
-    <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <circle cx="10" cy="6.5" r="3" />
-      <path d="M4 17c0-3.3 2.7-5 6-5s6 1.7 6 5" />
     </svg>
   );
 }
@@ -186,17 +178,25 @@ function IconBag() {
     </svg>
   );
 }
-function IconChat() {
+function IconUser() {
   return (
     <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h11A1.5 1.5 0 0 1 17 5.5v7a1.5 1.5 0 0 1-1.5 1.5H8l-4 3v-3H4.5A1.5 1.5 0 0 1 3 12.5v-7Z" />
+      <circle cx="10" cy="6.5" r="3" />
+      <path d="M4 17c0-3.3 2.7-5 6-5s6 1.7 6 5" />
     </svg>
   );
 }
-function IconSend() {
+function IconPrice() {
   return (
     <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M17 3 9 11M17 3l-5 14-3-6-6-3 14-5Z" />
+      <path d="M10 3v14M13.5 6.5c0-1.4-1.6-2.2-3.5-2.2s-3.5.8-3.5 2.4S8 9 10 9.4s3.6 1 3.6 2.6-1.7 2.4-3.6 2.4-3.6-.8-3.6-2.3" />
+    </svg>
+  );
+}
+function IconChart() {
+  return (
+    <svg className={ICON} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M3 17h14M6 14V8M10 14V4M14 14v-4" />
     </svg>
   );
 }

@@ -8,6 +8,7 @@ import { supportRouter } from './support.routes.js';
 import { marketingRouter } from './marketing.routes.js';
 import { staffRouter } from './staff.routes.js';
 import { globalRouter } from './global.routes.js';
+import { applicationsRouter } from './applications.routes.js';
 
 /**
  * The platform control plane.
@@ -26,5 +27,6 @@ platformRouter.use('/metrics', metricsRouter);
 platformRouter.use('/tenants', tenantsRouter);
 platformRouter.use('/staff', staffRouter);
 platformRouter.use('/global', globalRouter);
+platformRouter.use('/applications', applicationsRouter);
 platformRouter.use('/support', supportRouter);
 platformRouter.use('/marketing', marketingRouter);

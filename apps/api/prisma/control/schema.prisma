@@ -53,6 +53,7 @@ model Tenant {
   staff    StaffUser[]
   tickets  SupportTicket[]
   banners  PlatformBanner[]
+  applications SellerApplication[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -84,6 +85,7 @@ model StaffUser {
 
   sessions  Session[]
   assignedTickets SupportTicket[] @relation("TicketAssignee")
+  reviewedApplications SellerApplication[] @relation("ApplicationReviewer")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -204,6 +206,78 @@ model PlatformBanner {
   // Null targets every tenant; set to run the banner on one store only.
   tenantId String?
   tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// SELLER ONBOARDING
+// A seller signs up before a tenant exists, so the application cannot live in
+// a tenant database. It sits here until the platform team approves it, and
+// approval is what provisions the store's database and its owner account.
+// ---------------------------------------------------------------------------
+
+enum ApplicationStatus {
+  DRAFT        // still filling in the wizard
+  SUBMITTED    // waiting for the platform team
+  UNDER_REVIEW
+  APPROVED     // tenant provisioned, seller can sign in
+  REJECTED
+}
+
+model SellerApplication {
+  id String @id @default(cuid())
+
+  // --- Step 1: account ---
+  email        String  @unique
+  passwordHash String
+  contactName  String
+  phone        String
+
+  // Verification is proved before the application can be submitted.
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  // Dev-only plaintext codes. Replace with a hashed, expiring code and a real
+  // email/SMS provider before production.
+  emailCode String?
+  phoneCode String?
+
+  // --- Step 2: store page ---
+  storeName    String?
+  storeSlug    String?
+  category     String?
+  brandPrimary String  @default("#0F5132")
+  brandAccent  String  @default("#84CC16")
+  logoKey      String?
+
+  // --- Step 3: business info ---
+  legalName  String?
+  taxId      String?
+  addressLine1 String?
+  city       String?
+  region     String?
+  postalCode String?
+  country    String? @default("PK")
+
+  // --- Step 4: KYC ---
+  kycDocType  String?
+  kycFrontKey String?
+  kycBackKey  String?
+
+  // --- Review ---
+  status       ApplicationStatus @default(DRAFT)
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  reviewedById String?
+  reviewedBy   StaffUser?        @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  // Set once approved and the store database exists.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

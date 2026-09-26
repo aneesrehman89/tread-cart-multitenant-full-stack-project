@@ -14,6 +14,7 @@ import { healthRouter } from './modules/health/health.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { platformRouter } from './modules/platform/index.js';
+import { sellerRouter } from './modules/seller/index.js';
 
 export function createApp(): Express {
   const app = express();
@@ -64,6 +65,10 @@ export function createApp(): Express {
   // The platform console is cross-tenant, so it mounts BEFORE the tenant
   // middleware and never resolves a single tenant from the request.
   app.use('/v1/platform', platformRouter);
+
+  // The seller dashboard takes its tenant from the session, not a header, so
+  // it also mounts before the tenant middleware.
+  app.use('/v1/seller', sellerRouter);
 
   // Everything below this line runs inside a resolved tenant's database.
   app.use('/v1', resolveTenant);
