@@ -1,0 +1,310 @@
+// ---------------------------------------------------------------------------
+// TENANT SCHEMA
+// Applied identically to every tenant database. There is no tenantId column
+// anywhere in here on purpose: isolation is the database boundary itself.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/tenant"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Overridden per request at runtime via `datasources.db.url`. The value here
+  // is only used by the CLI when running migrations against one tenant.
+  url      = env("TENANT_DATABASE_URL")
+}
+
+enum ProductType {
+  TIRE
+  WHEEL
+  ACCESSORY
+}
+
+enum SpeedRating {
+  Q
+  R
+  S
+  T
+  U
+  H
+  V
+  W
+  Y
+  Z
+}
+
+enum SeasonType {
+  ALL_SEASON
+  SUMMER
+  WINTER
+  ALL_TERRAIN
+  MUD_TERRAIN
+}
+
+enum OrderStatus {
+  DRAFT
+  AWAITING_PAYMENT
+  PAID
+  FULFILLING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Brand {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  logoUrl  String?
+  products Product[]
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  name        String
+  type        ProductType
+  description String?
+  brandId     String
+  brand       Brand       @relation(fields: [brandId], references: [id])
+  isActive    Boolean     @default(true)
+
+  skus      Sku[]
+  images    ProductImage[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([type, isActive])
+  @@index([brandId])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // S3 object key, not a URL. URLs are signed on read so the bucket stays private.
+  s3Key     String
+  alt       String?
+  position  Int     @default(0)
+
+  @@index([productId])
+}
+
+// The sellable unit. Tire and wheel attributes are nullable because one table
+// carries both; `type` on the parent Product says which set is meaningful.
+model Sku {
+  id        String  @id @default(cuid())
+  sku       String  @unique
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Money is stored in minor units (cents) to keep arithmetic exact.
+  basePriceCents Int
+  compareAtCents Int?
+  currency       String @default("USD")
+  weightGrams    Int?
+
+  // --- Tire attributes (e.g. 225/45R17 94V) ---
+  sectionWidthMm Int?
+  aspectRatio    Int?
+  rimDiameterIn  Int?
+  loadIndex      Int?
+  speedRating    SpeedRating?
+  season         SeasonType?
+  treadwear      Int?
+
+  // --- Wheel attributes ---
+  wheelWidthIn Float?
+  boltPattern  String? // e.g. "5x114.3"
+  offsetMm     Int?
+  centerBoreMm Float?
+  finish       String?
+
+  inventory   InventoryItem?
+  groupPrices CustomerGroupPrice[]
+  fitments    SkuFitment[]
+  orderItems  OrderItem[]
+  isActive    Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([productId])
+  @@index([sectionWidthMm, aspectRatio, rimDiameterIn])
+  @@index([rimDiameterIn, boltPattern])
+}
+
+model InventoryItem {
+  id        String @id @default(cuid())
+  skuId     String @unique
+  sku       Sku    @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  // onHand - reserved = sellable. Reserved is held between checkout and payment.
+  onHand    Int    @default(0)
+  reserved  Int    @default(0)
+  reorderAt Int    @default(0)
+  warehouse String @default("MAIN")
+
+  updatedAt DateTime @updatedAt
+}
+
+// --- Vehicle fitment -------------------------------------------------------
+
+model Vehicle {
+  id    String @id @default(cuid())
+  year  Int
+  make  String
+  model String
+  trim  String?
+
+  fitments SkuFitment[]
+
+  @@unique([year, make, model, trim])
+  @@index([make, model])
+}
+
+model SkuFitment {
+  skuId     String
+  sku       Sku     @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  position  String  @default("ALL") // ALL | FRONT | REAR (staggered setups)
+  isOem     Boolean @default(false)
+
+  @@id([skuId, vehicleId, position])
+  @@index([vehicleId])
+}
+
+// --- Customers and group pricing ------------------------------------------
+
+model CustomerGroup {
+  id   String @id @default(cuid())
+  name String @unique
+  code String @unique // e.g. "RETAIL", "TRADE", "FLEET"
+  // Fallback applied to any SKU without an explicit row in CustomerGroupPrice.
+  defaultDiscountBps Int @default(0) // basis points: 250 = 2.50%
+  priority           Int @default(0) // highest priority wins across groups
+
+  customers Customer[]
+  prices    CustomerGroupPrice[]
+}
+
+// SKU-level price override for one group. `priceCents` wins outright when set;
+// otherwise `discountBps` is applied to the SKU base price.
+model CustomerGroupPrice {
+  id      String        @id @default(cuid())
+  groupId String
+  group   CustomerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  skuId   String
+  sku     Sku           @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  priceCents  Int?
+  discountBps Int?
+  minQuantity Int       @default(1) // quantity breaks: 1+, 4+, 20+
+  startsAt    DateTime?
+  endsAt      DateTime?
+
+  @@unique([groupId, skuId, minQuantity])
+  @@index([skuId])
+}
+
+model Customer {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String?
+  firstName    String?
+  lastName     String?
+  phone        String?
+
+  groupId String?
+  group   CustomerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  orders    Order[]
+  addresses Address[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  line1      String
+  line2      String?
+  city       String
+  region     String
+  postalCode String
+  country    String   @default("US")
+  isDefault  Boolean  @default(false)
+
+  @@index([customerId])
+}
+
+// --- Orders ----------------------------------------------------------------
+
+model Order {
+  id     String      @id @default(cuid())
+  number String      @unique
+  status OrderStatus @default(DRAFT)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  email      String
+
+  subtotalCents Int    @default(0)
+  discountCents Int    @default(0)
+  taxCents      Int    @default(0)
+  shippingCents Int    @default(0)
+  totalCents    Int    @default(0)
+  currency      String @default("USD")
+
+  // Set once the signed checkout intent is exchanged for a Stripe session.
+  stripePaymentIntentId String?   @unique
+  stripeCheckoutId      String?   @unique
+  paidAt                DateTime?
+
+  items     OrderItem[]
+  events    OrderEvent[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  skuId   String
+  sku     Sku    @relation(fields: [skuId], references: [id])
+
+  quantity Int
+  // Snapshot of the resolved price at purchase time. Never recomputed later.
+  unitPriceCents Int
+  listPriceCents Int
+  appliedGroupId String?
+  nameSnapshot   String
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+// Every Stripe event id we have already handled. Webhooks are retried and
+// delivered out of order, so processing is gated on inserting this row.
+model ProcessedWebhook {
+  id          String   @id // Stripe event id
+  type        String
+  processedAt DateTime @default(now())
+}

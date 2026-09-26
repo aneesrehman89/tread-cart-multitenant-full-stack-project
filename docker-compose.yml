@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: treadcart-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: treadcart
+      POSTGRES_PASSWORD: treadcart
+      POSTGRES_DB: treadcart_control
+    ports:
+      - "5433:5432"
+    volumes:
+      - treadcart-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U treadcart -d treadcart_control"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: treadcart-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - treadcart-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # S3-compatible storage for local dev. Swap for real Amazon S3 in staging/prod
+  # by pointing S3_ENDPOINT at AWS and dropping S3_FORCE_PATH_STYLE.
+  # Optional: only starts with `docker compose --profile storage up -d`.
+  # If your network cannot pull the MinIO image, point S3_* at real AWS S3
+  # instead; nothing in the core skeleton needs this container.
+  minio:
+    profiles: ["storage"]
+    image: minio/minio:latest
+    container_name: treadcart-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: treadcart
+      MINIO_ROOT_PASSWORD: treadcart123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - treadcart-miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  treadcart-pgdata:
+  treadcart-redisdata:
+  treadcart-miniodata:

@@ -1,0 +1,109 @@
+// ---------------------------------------------------------------------------
+// CONTROL PLANE
+// One database for the whole platform. Knows which tenants exist, where each
+// tenant's database lives, who the staff users are, and which sessions are
+// live. Nothing here is tenant business data.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/control"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTROL_DATABASE_URL")
+}
+
+enum TenantStatus {
+  PENDING
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+}
+
+enum StaffRole {
+  PLATFORM_ADMIN // cross-tenant; not scoped to a single tenant
+  TENANT_OWNER
+  TENANT_ADMIN
+  CATALOG_MANAGER
+  ORDER_MANAGER
+  SUPPORT
+  READ_ONLY
+}
+
+model Tenant {
+  id     String       @id @default(cuid())
+  // URL-safe identifier, also the X-Tenant-Slug header value.
+  slug   String       @unique
+  name   String
+  status TenantStatus @default(PENDING)
+
+  // Connection details for this tenant's isolated database.
+  databaseName String  @unique
+  databaseUrl  String // TODO: encrypt at rest (KMS) before production
+  schemaVersion String @default("0")
+
+  // White-label theming, mapped onto the design-system tenant-brand token.
+  brandPrimary String  @default("#0F5132")
+  brandAccent  String  @default("#84CC16")
+  logoUrl      String?
+
+  domains  TenantDomain[]
+  staff    StaffUser[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([status])
+}
+
+// Custom + subdomain hostnames that resolve to a tenant.
+model TenantDomain {
+  id        String  @id @default(cuid())
+  host      String  @unique
+  isPrimary Boolean @default(false)
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model StaffUser {
+  id           String    @id @default(cuid())
+  email        String
+  passwordHash String
+  name         String
+  role         StaffRole
+  isActive     Boolean   @default(true)
+
+  // Null for PLATFORM_ADMIN, who is not bound to one tenant.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  sessions  Session[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Same address may exist as staff of two different tenants.
+  @@unique([tenantId, email])
+  @@index([email])
+}
+
+// Opaque-token sessions. We never store the token itself, only a peppered
+// SHA-256 of it, so a control-DB leak cannot be replayed against the API.
+model Session {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  staffUserId String
+  staffUser   StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  tenantId    String?
+  userAgent   String?
+  ip          String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+
+  @@index([staffUserId])
+  @@index([expiresAt])
+}
