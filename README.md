@@ -6,9 +6,10 @@ Multi-tenant eCommerce platform for tires and wheels.
 
 ## What is here today
 
-A runnable API skeleton. The multi-tenancy, auth, RBAC, pricing and caching
-foundations are real and exercised end to end; the commerce features on top of
-them are scaffolded but not finished (see [Not built yet](#not-built-yet)).
+A runnable API plus the **platform admin console**. The multi-tenancy, auth,
+RBAC, pricing and caching foundations are real and exercised end to end; the
+commerce features on top of them are scaffolded but not finished (see
+[Not built yet](#not-built-yet)).
 
 ```
 TreadCart/
@@ -25,7 +26,14 @@ TreadCart/
 │     ├─ middleware/rbac.ts    permissions, bundled into roles
 │     ├─ cache/cache.ts        read-through + write-through Redis helpers
 │     ├─ modules/pricing/      customer groups, SKU-level prices, qty breaks
+│     ├─ modules/platform/     cross-tenant control plane (the admin API)
+│     ├─ db/fanout.ts          query every tenant database at once
 │     └─ scripts/              tenant provisioner and seed
+├─ apps/admin/               platform admin console (Next.js App Router)
+│  └─ src/
+│     ├─ app/api/tc/           server-side proxy; holds the token in a cookie
+│     ├─ components/           design-system primitives and the app shell
+│     └─ app/…                 one folder per screen
 └─ UI's/                     design mockups (see the note at the bottom)
 ```
 
@@ -43,7 +51,9 @@ pnpm seed
 pnpm dev
 ```
 
-The API comes up on <http://localhost:4000>.
+`pnpm dev` runs both apps: the API on <http://localhost:4000> and the admin
+console on <http://localhost:3002>. Sign in with `admin@treadcart.test` /
+`Treadcart!2345`. (`pnpm dev:api` and `pnpm dev:admin` run them separately.)
 
 Postgres is published on **5433** and Redis on **6380** so they cannot collide
 with anything already installed locally.
@@ -73,8 +83,10 @@ Seeded logins, password `Treadcart!2345`:
 
 | Tenant | Owner | Catalog manager |
 | --- | --- | --- |
+| _platform console_ | `admin@treadcart.test` | — |
 | `apexauto` (tires) | `owner@apexauto.test` | `catalog@apexauto.test` |
 | `wheelworks` (wheels) | `owner@wheelworks.test` | `catalog@wheelworks.test` |
+| `torquelab` (suspended) | `owner@torquelab.test` | `catalog@torquelab.test` |
 
 Group pricing, on the same catalog call:
 
@@ -133,6 +145,44 @@ refreshes the same key, so no window exists where the cache serves the pre-write
 value. Every key is prefixed `t:<tenant-slug>:` because Redis is shared even
 though the databases are not.
 
+## The admin console
+
+`apps/admin` implements the six screens in `UI's/Admin/`, rebuilt for
+TreadCart. Every screen reads live data; none of the numbers are hard-coded.
+
+| Screen | Route | What is real |
+| --- | --- | --- |
+| Sign in | `/login` | Platform-only login; store credentials are rejected |
+| Dashboard | `/` | GMV, orders, trend and status donut, fanned out across tenant DBs |
+| Stores | `/stores` | Live tenant list; **Onboard store** provisions a real database |
+| Store detail | `/stores/[slug]` | Overview, catalog, orders, customers, staff, settings; suspend/reactivate works |
+| Support | `/support` | Ticket queue with SLA pills; replies and status changes persist |
+| Marketing | `/marketing` | Banner CRUD with live gradient preview |
+| Users & permissions | `/users` | Staff CRUD, role changes, and the RBAC matrix the server enforces |
+| My account | `/account` | Profile, password change, and real session revocation |
+
+Three sidebar entries (Global catalog, Customers, Orders) are cross-store
+views that did not appear in the mockups but are needed for the nav to work;
+each is a fan-out over every tenant database.
+
+### How the console authenticates
+
+The browser never holds the API token. `/login` posts to a Next.js route
+handler, which forwards to the API, captures the opaque token from the
+response, strips it from the body and stores it in an httpOnly cookie on the
+console's own origin. Every later call goes through the same proxy, which
+replays the token as a bearer header and forwards the caller's user-agent and
+IP so session rows record the real device.
+
+### Design tokens
+
+`tailwind.config.ts` carries the ramp from the design system in
+`UI's/1- user-customized-theaming.png`: a forest-green brand scale, a lime
+accent, green-tinted neutrals, and semantic status colours kept separate from
+the brand so order status stays readable. Each store's own
+`brandPrimary`/`brandAccent` are editable on the store Settings tab, with a
+live storefront preview.
+
 ## Not built yet
 
 The scope these foundations were built for, in the order I would tackle it:
@@ -143,7 +193,9 @@ The scope these foundations were built for, in the order I would tackle it:
   marks where the raw-body route must mount (before `express.json()`).
 - **S3 uploads.** `lib/s3.ts` is complete (signed PUT/GET, tenant-namespaced
   keys) but no route calls it yet.
-- **Admin/storefront apps.** API only so far.
+- **Customer storefront.** The admin console is built; the storefront is not.
+- **Campaigns and performance** tabs on Marketing need an events pipeline;
+  only the banners tab is wired up.
 - Inventory reservation between checkout and payment (`reserved` is modelled,
   not yet decremented).
 

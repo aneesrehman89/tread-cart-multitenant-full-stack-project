@@ -51,6 +51,8 @@ model Tenant {
 
   domains  TenantDomain[]
   staff    StaffUser[]
+  tickets  SupportTicket[]
+  banners  PlatformBanner[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -81,6 +83,7 @@ model StaffUser {
   tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   sessions  Session[]
+  assignedTickets SupportTicket[] @relation("TicketAssignee")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -106,4 +109,104 @@ model Session {
 
   @@index([staffUserId])
   @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// PLATFORM OPERATIONS
+// Support and marketing live in the control plane, not in tenant databases:
+// the platform team works across every tenant at once, and a fan-out query per
+// keystroke would not be usable.
+// ---------------------------------------------------------------------------
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id       String         @id @default(cuid())
+  number   String         @unique
+  subject  String
+  status   TicketStatus   @default(OPEN)
+  priority TicketPriority @default(MEDIUM)
+
+  // Who raised it. Tenant customers are referenced by email rather than by a
+  // foreign key, because their row lives in a different database.
+  tenantId       String
+  tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requesterName  String
+  requesterEmail String
+
+  assigneeId String?
+  assignee   StaffUser? @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  // When the response is due. Drives the "SLA 2h left" pill in the UI.
+  slaDueAt DateTime?
+
+  messages  TicketMessage[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([status, priority])
+  @@index([tenantId])
+}
+
+model TicketMessage {
+  id       String        @id @default(cuid())
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  // True when written by platform staff, false when written by the requester.
+  fromStaff  Boolean
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+enum BannerStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+enum BannerPlacement {
+  HOME_HERO
+  CATEGORY_PAGE
+  CHECKOUT
+}
+
+model PlatformBanner {
+  id        String          @id @default(cuid())
+  title     String
+  placement BannerPlacement @default(HOME_HERO)
+  status    BannerStatus    @default(DRAFT)
+
+  // Rendered as the card background in the admin grid and on the storefront.
+  gradientFrom String @default("#0F5132")
+  gradientTo   String @default("#166534")
+
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  // Null targets every tenant; set to run the banner on one store only.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }

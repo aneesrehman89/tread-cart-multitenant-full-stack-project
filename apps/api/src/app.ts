@@ -13,6 +13,7 @@ import { resolveTenant } from './middleware/tenant.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
+import { platformRouter } from './modules/platform/index.js';
 
 export function createApp(): Express {
   const app = express();
@@ -59,6 +60,10 @@ export function createApp(): Express {
       keyGenerator: (req) => `${req.header('x-tenant-slug') ?? req.hostname}:${req.ip}`,
     }),
   );
+
+  // The platform console is cross-tenant, so it mounts BEFORE the tenant
+  // middleware and never resolves a single tenant from the request.
+  app.use('/v1/platform', platformRouter);
 
   // Everything below this line runs inside a resolved tenant's database.
   app.use('/v1', resolveTenant);

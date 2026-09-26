@@ -18,9 +18,11 @@ function readBearerToken(req: Request): string | null {
   const header = req.header('authorization');
   if (header?.startsWith('Bearer ')) return header.slice(7).trim();
 
-  // Browser clients use an httpOnly cookie instead of a header.
-  const cookie = (req as Request & { cookies?: Record<string, string> }).cookies?.tc_session;
-  return cookie ?? null;
+  // Browser clients use an httpOnly cookie instead of a header. The platform
+  // console uses its own cookie name so signing into a store does not also
+  // sign you into the platform console in the same browser.
+  const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
+  return cookies?.tc_platform_session ?? cookies?.tc_session ?? null;
 }
 
 async function loadActor(tokenHash: string): Promise<AuthenticatedActor | null> {

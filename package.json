@@ -4,14 +4,16 @@
   "version": "0.1.0",
   "description": "TreadCart - multi-tenant eCommerce platform for tires & wheels",
   "scripts": {
-    "dev": "pnpm --filter @treadcart/api dev",
+    "dev": "pnpm --parallel --filter @treadcart/api --filter @treadcart/admin dev",
     "build": "pnpm -r build",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:nuke": "docker compose down -v",
     "db:generate": "pnpm --filter @treadcart/api db:generate",
     "db:migrate": "pnpm --filter @treadcart/api db:migrate",
-    "seed": "pnpm --filter @treadcart/api seed"
+    "seed": "pnpm --filter @treadcart/api seed",
+    "dev:api": "pnpm --filter @treadcart/api dev",
+    "dev:admin": "pnpm --filter @treadcart/admin dev"
   },
   "engines": {
     "node": ">=20"
