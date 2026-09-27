@@ -10,7 +10,14 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
+  let body: { error?: { message?: string } } | null = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { error: { message: text.slice(0, 200) } };
+    }
+  }
 
   if (!res.ok) {
     // Deliberately no redirect on 401. A shopper browses the whole catalogue

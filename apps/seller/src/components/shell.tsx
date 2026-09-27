@@ -3,24 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, initials, useApi } from '@/lib/api';
+import { api, initials } from '@/lib/api';
+import { useSession, type SellerMe } from './session';
 import { Avatar, Pill, titleCase } from './ui';
 
-export interface SellerMe {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  permissions: string[];
-  store: {
-    slug: string;
-    name: string;
-    status: string;
-    brandPrimary: string;
-    brandAccent: string;
-    logoUrl: string | null;
-  };
-}
+export type { SellerMe };
 
 /**
  * Nav entries carry the permission that gates their screen, so a catalog
@@ -40,7 +27,7 @@ const NAV = [
 export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrumb?: string[] }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: me } = useApi<SellerMe>('auth/me');
+  const { me } = useSession();
   const [signingOut, setSigningOut] = useState(false);
 
   async function signOut() {
@@ -56,7 +43,13 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-gradient-to-b from-brand-800 to-brand-950 lg:flex">
+      <aside
+        className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col lg:flex"
+        style={{
+          background:
+            'linear-gradient(to bottom, var(--store-brand, #0F4230), var(--store-brand-deep, #072219))',
+        }}
+      >
         <div className="flex items-center gap-2.5 px-5 py-5">
           {/* The store's own brand colour, not the platform's. */}
           <span
@@ -78,11 +71,13 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors ${
-                  active
-                    ? 'bg-brand-700/70 font-medium text-white'
-                    : 'text-brand-100/80 hover:bg-brand-800/60 hover:text-white'
+                className={`flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors ${
+                  active ? 'font-medium text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
                 }`}
+                style={{
+                  borderRadius: 'var(--btn-radius, 0.5rem)',
+                  backgroundColor: active ? 'rgba(255,255,255,0.16)' : undefined,
+                }}
               >
                 <Icon />
                 {item.label}
@@ -92,11 +87,11 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
         </nav>
 
         <div className="p-3">
-          <div className="flex items-center gap-2.5 rounded-lg bg-brand-900/60 px-3 py-2.5">
+          <div className="flex items-center gap-2.5 rounded-lg bg-black/25 px-3 py-2.5">
             <Avatar label={me ? initials(me.name) : '··'} color="#84CC16" size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium text-white">{me?.name ?? 'Loading'}</p>
-              <p className="truncate text-2xs text-brand-200">
+              <p className="truncate text-2xs text-white/60">
                 {me ? titleCase(me.role) : ''}
               </p>
             </div>
@@ -104,7 +99,7 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
               onClick={signOut}
               disabled={signingOut}
               title="Sign out"
-              className="rounded p-1 text-brand-200 hover:bg-brand-800 hover:text-white"
+              className="rounded p-1 text-white/60 hover:bg-white/10 hover:text-white"
             >
               <IconExit />
             </button>
@@ -136,18 +131,23 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
   );
 }
 
-/** Bounces to /login when the session cookie is missing or has expired. */
-export function useRequireSeller() {
+/**
+ * Bounces to /login when there is no live session.
+ *
+ * Reads the shared session rather than issuing its own auth/me — that extra
+ * request was serialised in front of every screen's own data fetch.
+ */
+export function useRequireSeller(): boolean {
   const router = useRouter();
-  const [checked, setChecked] = useState(false);
+  const { me, loading, isPublic } = useSession();
 
   useEffect(() => {
-    api('auth/me')
-      .then(() => setChecked(true))
-      .catch(() => router.replace('/login'));
-  }, [router]);
+    // Only once the shared session has actually resolved, and never on a
+    // public route — redirecting mid-load caused a reload loop.
+    if (!isPublic && !loading && !me) router.replace('/login');
+  }, [loading, me, isPublic, router]);
 
-  return checked;
+  return !!me;
 }
 
 const ICON = 'h-4 w-4 shrink-0';

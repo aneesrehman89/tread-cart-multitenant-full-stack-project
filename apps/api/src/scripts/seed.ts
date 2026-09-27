@@ -12,10 +12,19 @@ import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js
 import { controlDb } from '../db/control.js';
 import { provisionTenant } from './provision-tenant.js';
 import { logger } from '../lib/logger.js';
+import { TIRES, WHEELS, VEHICLES, TIRE_IMAGES, WHEEL_IMAGES, slugify } from './catalog-data.js';
 
 const DEMO_PASSWORD = 'Treadcart!2345';
 
-async function seedTenantData(databaseUrl: string, flavour: 'tires' | 'wheels'): Promise<void> {
+/**
+ * Seeds one store's catalog.
+ *
+ * Every store gets the full range - tires and wheels - because a tire shop
+ * that stocks no wheels is not a useful demo of fitment or filtering. Stock
+ * levels are deliberately mixed so the in-stock, low and out-of-stock filters
+ * all have rows to show.
+ */
+async function seedTenantData(databaseUrl: string): Promise<void> {
   const db = new TenantPrismaClient({ datasources: { db: { url: databaseUrl } } });
 
   try {
@@ -37,122 +46,174 @@ async function seedTenantData(databaseUrl: string, flavour: 'tires' | 'wheels'):
       }),
     ]);
 
-    const brandName = flavour === 'tires' ? 'Meridian' : 'Volk Forged';
-    const brand = await db.brand.upsert({
-      where: { slug: brandName.toLowerCase().replace(/\s+/g, '-') },
-      create: { name: brandName, slug: brandName.toLowerCase().replace(/\s+/g, '-') },
-      update: {},
-    });
-
-    const vehicle = await db.vehicle.upsert({
-      where: { year_make_model_trim: { year: 2021, make: 'Honda', model: 'Civic', trim: 'Sport' } },
-      create: { year: 2021, make: 'Honda', model: 'Civic', trim: 'Sport' },
-      update: {},
-    });
-
-    // One shape for both flavours: `w` is section width in mm for tires and
-    // wheel width in inches for wheels, and the rest are populated per type.
-    interface Spec {
-      size: string;
-      w: number;
-      r: number;
-      price: number;
-      a?: number;
-      load?: number;
-      speed?: 'H' | 'V' | 'W';
-      bolt?: string;
-      offset?: number;
+    const vehicles = [];
+    for (const v of VEHICLES) {
+      vehicles.push(
+        await db.vehicle.upsert({
+          where: {
+            year_make_model_trim: { year: v.year, make: v.make, model: v.model, trim: v.trim },
+          },
+          create: v,
+          update: {},
+        }),
+      );
     }
 
-    const specs: Spec[] =
-      flavour === 'tires'
-        ? [
-            { size: '225/45R17', w: 225, a: 45, r: 17, price: 18900, load: 94, speed: 'V' },
-            { size: '235/40R18', w: 235, a: 40, r: 18, price: 21400, load: 95, speed: 'W' },
-            { size: '205/55R16', w: 205, a: 55, r: 16, price: 14200, load: 91, speed: 'H' },
-          ]
-        : [
-            { size: '17x7.5 +45', w: 7.5, r: 17, price: 32900, bolt: '5x114.3', offset: 45 },
-            { size: '18x8.5 +35', w: 8.5, r: 18, price: 41900, bolt: '5x114.3', offset: 35 },
-          ];
+    const skuIds: string[] = [];
 
-    for (const [i, spec] of specs.entries()) {
-      const isTire = flavour === 'tires';
-      const slug = `${brand.slug}-${spec.size.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+    // --- Tires ---
+    for (const [i, t] of TIRES.entries()) {
+      const brand = await db.brand.upsert({
+        where: { slug: slugify(t.brand) },
+        create: { name: t.brand, slug: slugify(t.brand) },
+        update: { name: t.brand },
+      });
+
+      const name = t.brand + ' ' + t.model + ' ' + t.size;
+      const slug = slugify(name);
+      const skuCode =
+        t.brand.slice(0, 3).toUpperCase() + '-' + t.size.replace(/[^A-Z0-9]+/gi, '');
 
       const product = await db.product.upsert({
         where: { slug },
-        create: {
-          slug,
-          name: `${brand.name} ${isTire ? 'GT Sport' : 'TE-F'} ${spec.size}`,
-          type: isTire ? 'TIRE' : 'WHEEL',
-          brandId: brand.id,
-          description: isTire
-            ? 'Ultra-high-performance all-season with an asymmetric tread.'
-            : 'Flow-formed monoblock wheel, gloss black.',
-        },
-        update: {},
+        create: { slug, name, type: 'TIRE', brandId: brand.id, description: t.description },
+        update: { name, description: t.description, brandId: brand.id, isActive: true },
       });
 
-      const skuCode = `${brand.slug.toUpperCase().slice(0, 3)}-${spec.size.replace(/[^A-Z0-9]+/gi, '')}`;
       const sku = await db.sku.upsert({
         where: { sku: skuCode },
         create: {
           sku: skuCode,
           productId: product.id,
-          basePriceCents: spec.price,
-          compareAtCents: spec.price + 3000,
-          weightGrams: isTire ? 10500 : 9800,
-          ...(isTire
-            ? {
-                sectionWidthMm: spec.w,
-                aspectRatio: spec.a,
-                rimDiameterIn: spec.r,
-                loadIndex: spec.load,
-                speedRating: spec.speed,
-                season: 'ALL_SEASON' as const,
-                treadwear: 500,
-              }
-            : {
-                wheelWidthIn: spec.w,
-                rimDiameterIn: spec.r,
-                boltPattern: spec.bolt,
-                offsetMm: spec.offset,
-                centerBoreMm: 64.1,
-                finish: 'Gloss Black',
-              }),
+          basePriceCents: t.priceCents,
+          compareAtCents: t.compareAtCents,
+          weightGrams: 9500,
+          sectionWidthMm: t.width,
+          aspectRatio: t.ratio,
+          rimDiameterIn: t.rim,
+          loadIndex: t.loadIndex,
+          speedRating: t.speed,
+          season: t.season,
+          treadwear: t.treadwear,
         },
-        update: {},
+        update: { basePriceCents: t.priceCents, compareAtCents: t.compareAtCents },
       });
+      skuIds.push(sku.id);
 
       await db.inventoryItem.upsert({
         where: { skuId: sku.id },
-        create: { skuId: sku.id, onHand: 40 - i * 8, reorderAt: 8 },
-        update: {},
+        create: { skuId: sku.id, onHand: t.onHand, reorderAt: t.reorderAt },
+        update: { onHand: t.onHand, reorderAt: t.reorderAt },
       });
 
+      // Replaced wholesale, so re-seeding cannot pile up duplicate images.
+      await db.productImage.deleteMany({ where: { productId: product.id } });
+      await db.productImage.create({
+        data: {
+          productId: product.id,
+          url: TIRE_IMAGES[i % TIRE_IMAGES.length]!,
+          alt: name,
+          position: 0,
+        },
+      });
+
+      const vehicle = vehicles[i % vehicles.length]!;
       await db.skuFitment.upsert({
-        where: { skuId_vehicleId_position: { skuId: sku.id, vehicleId: vehicle.id, position: 'ALL' } },
+        where: {
+          skuId_vehicleId_position: { skuId: sku.id, vehicleId: vehicle.id, position: 'ALL' },
+        },
         create: { skuId: sku.id, vehicleId: vehicle.id, position: 'ALL', isOem: i === 0 },
         update: {},
       });
+    }
 
-      // SKU-level pricing: trade gets a fixed price, fleet a volume break at 4+.
+    // --- Wheels ---
+    for (const [i, w] of WHEELS.entries()) {
+      const brand = await db.brand.upsert({
+        where: { slug: slugify(w.brand) },
+        create: { name: w.brand, slug: slugify(w.brand) },
+        update: { name: w.brand },
+      });
+
+      const name = w.brand + ' ' + w.model + ' ' + w.size;
+      const slug = slugify(name);
+      const skuCode =
+        w.brand.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() +
+        '-' +
+        w.size.replace(/[^A-Z0-9]+/gi, '');
+
+      const product = await db.product.upsert({
+        where: { slug },
+        create: { slug, name, type: 'WHEEL', brandId: brand.id, description: w.description },
+        update: { name, description: w.description, brandId: brand.id, isActive: true },
+      });
+
+      const sku = await db.sku.upsert({
+        where: { sku: skuCode },
+        create: {
+          sku: skuCode,
+          productId: product.id,
+          basePriceCents: w.priceCents,
+          compareAtCents: w.compareAtCents,
+          weightGrams: w.weightGrams,
+          rimDiameterIn: w.rim,
+          wheelWidthIn: w.widthIn,
+          boltPattern: w.boltPattern,
+          offsetMm: w.offsetMm,
+          centerBoreMm: w.centerBoreMm,
+          finish: w.finish,
+        },
+        update: { basePriceCents: w.priceCents, compareAtCents: w.compareAtCents },
+      });
+      skuIds.push(sku.id);
+
+      await db.inventoryItem.upsert({
+        where: { skuId: sku.id },
+        create: { skuId: sku.id, onHand: w.onHand, reorderAt: w.reorderAt },
+        update: { onHand: w.onHand, reorderAt: w.reorderAt },
+      });
+
+      await db.productImage.deleteMany({ where: { productId: product.id } });
+      await db.productImage.create({
+        data: {
+          productId: product.id,
+          url: WHEEL_IMAGES[i % WHEEL_IMAGES.length]!,
+          alt: name,
+          position: 0,
+        },
+      });
+
+      const vehicle = vehicles[(i + 2) % vehicles.length]!;
+      await db.skuFitment.upsert({
+        where: {
+          skuId_vehicleId_position: { skuId: sku.id, vehicleId: vehicle.id, position: 'ALL' },
+        },
+        create: { skuId: sku.id, vehicleId: vehicle.id, position: 'ALL', isOem: false },
+        update: {},
+      });
+    }
+
+    // SKU-level pricing on a handful of lines, so the pricing screens have
+    // both fixed-price and percentage overrides to show.
+    for (const [i, skuId] of skuIds.slice(0, 6).entries()) {
+      const sku = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
       await db.customerGroupPrice.upsert({
-        where: { groupId_skuId_minQuantity: { groupId: trade.id, skuId: sku.id, minQuantity: 1 } },
+        where: { groupId_skuId_minQuantity: { groupId: trade.id, skuId, minQuantity: 1 } },
         create: {
           groupId: trade.id,
-          skuId: sku.id,
-          priceCents: Math.round(spec.price * 0.88),
+          skuId,
+          priceCents: Math.round(sku.basePriceCents * 0.88),
           minQuantity: 1,
         },
         update: {},
       });
-      await db.customerGroupPrice.upsert({
-        where: { groupId_skuId_minQuantity: { groupId: fleet.id, skuId: sku.id, minQuantity: 4 } },
-        create: { groupId: fleet.id, skuId: sku.id, discountBps: 1800, minQuantity: 4 },
-        update: {},
-      });
+      if (i % 2 === 0) {
+        await db.customerGroupPrice.upsert({
+          where: { groupId_skuId_minQuantity: { groupId: fleet.id, skuId, minQuantity: 4 } },
+          create: { groupId: fleet.id, skuId, discountBps: 1800, minQuantity: 4 },
+          update: {},
+        });
+      }
     }
 
     const customers: { email: string; first: string; last: string; groupId: string }[] = [
@@ -169,21 +230,49 @@ async function seedTenantData(databaseUrl: string, flavour: 'tires' | 'wheels'):
         await db.customer.upsert({
           where: { email: c.email },
           create: { email: c.email, firstName: c.first, lastName: c.last, groupId: c.groupId },
-          // Update too, so re-running the seed corrects existing rows.
           update: { firstName: c.first, lastName: c.last, groupId: c.groupId },
         }),
       );
     }
 
-    // Drop demo customers left behind by an earlier version of this seed, so
-    // re-running it converges on exactly the list above.
     await db.customer.deleteMany({ where: { email: { notIn: customers.map((c) => c.email) } } });
+
+    // Order history is cleared before the catalog is tidied, so stray
+    // products are genuinely unreferenced and can be deleted rather than
+    // merely hidden. Seeding the new orders afterwards also stops them
+    // picking a stray SKU and pinning it all over again.
+    await db.orderItem.deleteMany();
+    await db.orderEvent.deleteMany();
+    await db.order.deleteMany();
+
+    const expectedSlugs = [
+      ...TIRES.map((t) => slugify(`${t.brand} ${t.model} ${t.size}`)),
+      ...WHEELS.map((w) => slugify(`${w.brand} ${w.model} ${w.size}`)),
+    ];
+    const strays = await db.product.findMany({
+      where: { slug: { notIn: expectedSlugs } },
+      include: { skus: { include: { orderItems: { take: 1 } } } },
+    });
+    for (const stray of strays) {
+      // A product still on an order is hidden, never deleted: order history
+      // references its SKUs and must stay readable.
+      const referenced = stray.skus.some((sk) => sk.orderItems.length > 0);
+      if (referenced) {
+        await db.product.update({ where: { id: stray.id }, data: { isActive: false } });
+      } else {
+        await db.product.delete({ where: { id: stray.id } });
+      }
+    }
+
+    // Brands left with nothing to sell are noise in the filter sidebar.
+    await db.brand.deleteMany({ where: { products: { none: {} } } });
 
     await seedOrders(db, created);
   } finally {
     await db.$disconnect();
   }
 }
+
 
 /** How many orders each store gets. Small enough that the lists stay readable. */
 const ORDERS_PER_TENANT = 10;
@@ -228,7 +317,7 @@ async function seedOrders(
 
     await db.order.create({
       data: {
-        number: `TC-${String(100_000 + i * 7 + Math.floor(Math.random() * 900))}`,
+        number: `TC-1${String(i).padStart(5, '0')}`,
         status,
         customerId: customer.id,
         email: customer.email,
@@ -415,13 +504,13 @@ async function main(): Promise<void> {
       });
 
   const tenants = [
-    { slug: 'apexauto', name: 'Apex Auto', host: 'apexauto.localhost', flavour: 'tires' as const,
+    { slug: 'apexauto', name: 'Apex Auto', host: 'apexauto.localhost',
       brandPrimary: '#0F5132', brandAccent: '#84CC16',
       owner: 'Imran Qureshi', catalogManager: 'Sadia Nawaz' },
-    { slug: 'wheelworks', name: 'WheelWorks', host: 'wheelworks.localhost', flavour: 'wheels' as const,
+    { slug: 'wheelworks', name: 'WheelWorks', host: 'wheelworks.localhost',
       brandPrimary: '#1E3A8A', brandAccent: '#38BDF8',
       owner: 'Tariq Mehmood', catalogManager: 'Mariam Aslam' },
-    { slug: 'torquelab', name: 'Torque Lab', host: 'torquelab.localhost', flavour: 'wheels' as const,
+    { slug: 'torquelab', name: 'Torque Lab', host: 'torquelab.localhost',
       brandPrimary: '#7C2D12', brandAccent: '#F59E0B',
       owner: 'Owais Farooq', catalogManager: 'Laura Bennett' },
   ];
@@ -460,7 +549,7 @@ async function main(): Promise<void> {
       update: { passwordHash, name: t.catalogManager },
     });
 
-    await seedTenantData(databaseUrl, t.flavour);
+    await seedTenantData(databaseUrl);
     logger.info({ slug: t.slug }, 'tenant seeded');
   }
 

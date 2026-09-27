@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { CartProvider } from '@/lib/cart';
+import { StoreProvider } from '@/components/store-context';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -19,8 +20,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans">
-        {/* The cart must survive navigation, so it lives above the router. */}
-        <CartProvider>{children}</CartProvider>
+        {/* Store identity, shopper session and cart all live above the
+            router, so navigating between screens refetches none of them. */}
+        <StoreProvider>
+          <CartProvider>{children}</CartProvider>
+        </StoreProvider>
       </body>
     </html>
   );

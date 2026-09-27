@@ -6,6 +6,7 @@ import { requirePermission } from '../../middleware/rbac.js';
 import { resolveSellerTenant, sellerContext } from '../../middleware/seller-tenant.js';
 import { invalidateTenantLookup } from '../../middleware/tenant.js';
 import { asyncHandler } from '../../middleware/error.js';
+import { invalidatePrefix, tenantKey } from '../../cache/cache.js';
 import { sellerSignupRouter } from './signup.routes.js';
 import { sellerAuthRouter } from './seller.auth.js';
 import { googleRouter } from './google.routes.js';
@@ -38,11 +39,21 @@ sellerRouter.use('/orders', sellerOrdersRouter);
 sellerRouter.use('/customers', sellerCustomersRouter);
 sellerRouter.use('/staff', sellerStaffRouter);
 
+/** The theme tokens a store may change. Structure and spacing stay fixed. */
+export const FONT_CHOICES = ['inter', 'dm-sans', 'manrope', 'source-serif', 'space-grotesk'] as const;
+export const BUTTON_STYLES = ['rounded', 'pill', 'square'] as const;
+export const BUTTON_WEIGHTS = ['solid', 'soft', 'outline'] as const;
+export const CARD_STYLES = ['soft', 'flat', 'bordered'] as const;
+
 const settingsSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   brandPrimary: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   brandAccent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   logoUrl: z.string().url().nullable().optional(),
+  fontFamily: z.enum(FONT_CHOICES).optional(),
+  buttonStyle: z.enum(BUTTON_STYLES).optional(),
+  buttonWeight: z.enum(BUTTON_WEIGHTS).optional(),
+  cardStyle: z.enum(CARD_STYLES).optional(),
 });
 
 /** Storefront settings: the store's own white-label branding. */
@@ -62,6 +73,17 @@ sellerRouter.get(
       brandPrimary: record.brandPrimary,
       brandAccent: record.brandAccent,
       logoUrl: record.logoUrl,
+      fontFamily: record.fontFamily,
+      buttonStyle: record.buttonStyle,
+      buttonWeight: record.buttonWeight,
+      cardStyle: record.cardStyle,
+      // Offered to the settings screen so the choices live in one place.
+      choices: {
+        fonts: FONT_CHOICES,
+        buttonStyles: BUTTON_STYLES,
+        buttonWeights: BUTTON_WEIGHTS,
+        cardStyles: CARD_STYLES,
+      },
       domains: record.domains,
       // Shown read-only: a seller should see where their data lives, but
       // renaming a database is a platform operation.
@@ -88,6 +110,9 @@ sellerRouter.patch(
     // The storefront resolves tenants through a cached lookup, so a rename or
     // a colour change has to clear it to show up straight away.
     await invalidateTenantLookup(existing.slug, existing.domains.map((d) => d.host));
+    // The storefront caches its home payload per tenant; a rename or a theme
+    // change has to drop it or the shop keeps the old look for the full TTL.
+    await invalidatePrefix(tenantKey(existing.slug, 'shop'));
 
     res.json(updated);
   }),

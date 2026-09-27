@@ -8,5 +8,6 @@
   }
   body {
     @apply bg-canvas text-ink-800;
+    font-family: var(--store-font, 'Inter', ui-sans-serif, system-ui, sans-serif);
   }
 }

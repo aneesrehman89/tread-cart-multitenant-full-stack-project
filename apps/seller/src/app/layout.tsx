@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { SellerSessionProvider } from '@/components/session';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        {/* One auth/me for the whole app; also applies the store's theme. */}
+        <SellerSessionProvider>{children}</SellerSessionProvider>
+      </body>
     </html>
   );
 }

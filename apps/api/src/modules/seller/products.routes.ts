@@ -49,14 +49,33 @@ sellerProductsRouter.get(
       orderBy: { name: 'asc' },
     });
 
-    // Stock state is derived across a product's SKUs, so it is filtered here
-    // rather than in SQL.
+    // Stock state is per-SKU, then rolled up. Summing first was wrong: a
+    // product with one sold-out size and one well-stocked size read as "in
+    // stock", so the LOW and OUT filters never surfaced it.
     const rows = products
       .map((p) => {
-        const onHand = p.skus.reduce((a, s) => a + (s.inventory?.onHand ?? 0), 0);
-        const reorderAt = p.skus.reduce((a, s) => a + (s.inventory?.reorderAt ?? 0), 0);
-        const stockState = onHand === 0 ? 'OUT' : onHand <= reorderAt ? 'LOW' : 'IN';
-        return { ...p, onHand, reorderAt, stockState };
+        const perSku = p.skus.map((sku) => {
+          const onHand = sku.inventory?.onHand ?? 0;
+          const reorderAt = sku.inventory?.reorderAt ?? 0;
+          return onHand === 0 ? 'OUT' : onHand <= reorderAt ? 'LOW' : 'IN';
+        });
+
+        // Worst state wins, so anything needing attention is visible.
+        const stockState = perSku.includes('OUT')
+          ? 'OUT'
+          : perSku.includes('LOW')
+            ? 'LOW'
+            : 'IN';
+
+        return {
+          ...p,
+          onHand: p.skus.reduce((a, sku) => a + (sku.inventory?.onHand ?? 0), 0),
+          reorderAt: Math.max(0, ...p.skus.map((sku) => sku.inventory?.reorderAt ?? 0)),
+          stockState,
+          // How many of this product's SKUs are in each state, for the table.
+          skusOut: perSku.filter((x) => x === 'OUT').length,
+          skusLow: perSku.filter((x) => x === 'LOW').length,
+        };
       })
       .filter((p) => !q.stock || p.stockState === q.stock);
 
@@ -102,6 +121,8 @@ const skuSchema = z.object({
 
 const productSchema = z.object({
   name: z.string().min(1).max(200),
+  /** External image URL. Stores that upload to S3 send an s3Key instead. */
+  imageUrl: z.string().url().nullable().optional(),
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   type: z.enum(['TIRE', 'WHEEL', 'ACCESSORY']),
   brandName: z.string().min(1).max(120),
@@ -138,6 +159,9 @@ sellerProductsRouter.post(
         description: body.description ?? null,
         isActive: body.isActive,
         brandId: brand.id,
+        ...(body.imageUrl
+          ? { images: { create: { url: body.imageUrl, alt: body.name, position: 0 } } }
+          : {}),
         skus: {
           create: body.skus.map(({ onHand, reorderAt, ...sku }) => ({
             ...sku,
@@ -145,7 +169,7 @@ sellerProductsRouter.post(
           })),
         },
       },
-      include: { skus: { include: { inventory: true } }, brand: true },
+      include: { skus: { include: { inventory: true } }, brand: true, images: true },
     });
 
     await bustCatalog(tenant.slug);
@@ -157,6 +181,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   isActive: z.boolean().optional(),
+  imageUrl: z.string().url().nullable().optional(),
 });
 
 sellerProductsRouter.patch(
@@ -169,7 +194,19 @@ sellerProductsRouter.patch(
     const existing = await db.product.findUnique({ where: { id: req.params.id! } });
     if (!existing) throw notFound('Product not found');
 
-    const product = await db.product.update({ where: { id: existing.id }, data: body });
+    const { imageUrl, ...fields } = body;
+    const product = await db.product.update({ where: { id: existing.id }, data: fields });
+
+    // One primary image per product for now, so setting a new one replaces it.
+    if (imageUrl !== undefined) {
+      await db.productImage.deleteMany({ where: { productId: existing.id } });
+      if (imageUrl) {
+        await db.productImage.create({
+          data: { productId: existing.id, url: imageUrl, alt: product.name, position: 0 },
+        });
+      }
+    }
+
     await bustCatalog(tenant.slug);
     res.json(product);
   }),

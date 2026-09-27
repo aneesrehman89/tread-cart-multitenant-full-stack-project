@@ -54,6 +54,10 @@ async function lookupTenant(
     brandPrimary: record.brandPrimary,
     brandAccent: record.brandAccent,
     logoUrl: record.logoUrl,
+    fontFamily: record.fontFamily,
+    buttonStyle: record.buttonStyle,
+    buttonWeight: record.buttonWeight,
+    cardStyle: record.cardStyle,
     databaseUrl: record.databaseUrl,
     status: record.status,
   };
@@ -96,6 +100,10 @@ export async function resolveTenant(
       brandPrimary: tenant.brandPrimary,
       brandAccent: tenant.brandAccent,
       logoUrl: tenant.logoUrl,
+      fontFamily: tenant.fontFamily,
+      buttonStyle: tenant.buttonStyle,
+      buttonWeight: tenant.buttonWeight,
+      cardStyle: tenant.cardStyle,
     };
     req.db = await getTenantClient(tenant.id, tenant.databaseUrl);
 

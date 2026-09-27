@@ -49,6 +49,13 @@ model Tenant {
   brandAccent  String  @default("#84CC16")
   logoUrl      String?
 
+  // The rest of the white-label theme. Structure, spacing and type scale stay
+  // fixed across every store; only these tokens are a store's to change.
+  fontFamily  String @default("inter")   // inter | dm-sans | manrope | source-serif | space-grotesk
+  buttonStyle String @default("rounded") // rounded | pill | square
+  buttonWeight String @default("solid")  // solid | soft | outline
+  cardStyle   String @default("soft")    // soft | flat | bordered
+
   domains  TenantDomain[]
   staff    StaffUser[]
   tickets  SupportTicket[]

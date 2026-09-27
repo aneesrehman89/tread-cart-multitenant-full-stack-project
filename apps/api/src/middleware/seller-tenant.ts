@@ -36,6 +36,10 @@ export async function resolveSellerTenant(
       brandPrimary: tenant.brandPrimary,
       brandAccent: tenant.brandAccent,
       logoUrl: tenant.logoUrl,
+      fontFamily: tenant.fontFamily,
+      buttonStyle: tenant.buttonStyle,
+      buttonWeight: tenant.buttonWeight,
+      cardStyle: tenant.cardStyle,
     };
     req.db = await getTenantClient(tenant.id, tenant.databaseUrl);
 

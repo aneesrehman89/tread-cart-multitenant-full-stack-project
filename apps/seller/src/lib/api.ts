@@ -10,12 +10,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
+  let body: { error?: { message?: string } } | null = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { error: { message: text.slice(0, 200) } };
+    }
+  }
 
   if (!res.ok) {
-    if (res.status === 401 && typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
+    // No redirect here. Navigation is the job of a route guard, not of the
+    // fetch helper: this helper also runs on /login and /signup, where a 401
+    // from auth/me is the expected state, and redirecting from here put the
+    // app in an infinite reload loop on exactly those pages.
     throw new ApiError(body?.error?.message ?? `Request failed (${res.status})`, res.status, body);
   }
 

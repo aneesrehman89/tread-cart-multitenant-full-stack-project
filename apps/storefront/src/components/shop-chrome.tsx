@@ -3,38 +3,22 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
-import { api, initials, useApi } from '@/lib/api';
+import { api, initials } from '@/lib/api';
+import { useStore, type Shopper } from './store-context';
 import { useCart } from '@/lib/cart';
 import { Avatar, Pill } from './ui';
 
-export interface Shopper {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  groupId: string | null;
-  addresses: {
-    id: string;
-    line1: string;
-    line2: string | null;
-    city: string;
-    region: string;
-    postalCode: string;
-    country: string;
-    isDefault: boolean;
-  }[];
-}
+export type { Shopper };
 
 /** Shared header and footer for every storefront page. */
 export function ShopLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const cart = useCart();
-  const me = useApi<Shopper>('auth/me');
-  const store = useApi<{ store: { name: string; brandPrimary: string; brandAccent: string } }>('home');
+  const { store, shopper } = useStore();
   const [search, setSearch] = useState('');
 
-  const brand = store.data?.store.brandPrimary ?? '#0F5132';
-  const signedIn = !!me.data?.id;
+  const brand = store?.brandPrimary ?? '#0F5132';
+  const signedIn = !!shopper;
 
   async function signOut() {
     await api('auth/logout', { method: 'POST' }).catch(() => undefined);
@@ -55,10 +39,10 @@ export function ShopLayout({ children }: { children: ReactNode }) {
               className="grid h-8 w-8 place-items-center rounded-lg text-xs font-bold text-white"
               style={{ backgroundColor: brand }}
             >
-              {store.data ? initials(store.data.store.name) : 'TC'}
+              {store ? initials(store.name) : 'TC'}
             </span>
             <span className="hidden text-sm font-semibold text-ink-900 sm:block">
-              {store.data?.store.name ?? 'TreadCart'}
+              {store?.name ?? 'TreadCart'}
             </span>
           </Link>
 
@@ -103,7 +87,7 @@ export function ShopLayout({ children }: { children: ReactNode }) {
                 </Link>
                 <button onClick={signOut} title="Sign out" className="rounded-lg">
                   <Avatar
-                    label={initials(`${me.data!.firstName ?? ''} ${me.data!.lastName ?? ''}`.trim() || me.data!.email)}
+                    label={initials(`${shopper!.firstName ?? ''} ${shopper!.lastName ?? ''}`.trim() || shopper!.email)}
                     size="sm"
                     color={brand}
                   />
@@ -126,7 +110,7 @@ export function ShopLayout({ children }: { children: ReactNode }) {
       <footer className="mt-12 border-t border-ink-200 bg-surface">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-6 text-2xs text-ink-500">
           <span>
-            © {new Date().getFullYear()} {store.data?.store.name ?? 'TreadCart'} · powered by
+            © {new Date().getFullYear()} {store?.name ?? 'TreadCart'} · powered by
             TreadCart
           </span>
           <span className="flex gap-4">

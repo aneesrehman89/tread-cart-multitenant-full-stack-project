@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api, useApi } from '@/lib/api';
 import { Shell, useRequireAuth } from '@/components/shell';
+import { EditableText } from '@/components/editable';
 import {
   Button,
   Card,
@@ -57,6 +58,11 @@ export default function UsersPage() {
     users.reload();
   }
 
+  async function rename(u: StaffRow, name: string) {
+    await api(`staff/${u.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+    users.reload();
+  }
+
   return (
     <Shell breadcrumb={['Users & permissions']}>
       <PageHeader
@@ -103,7 +109,9 @@ export default function UsersPage() {
                 <tbody>
                   {users.data?.users.map((u) => (
                     <tr key={u.id} className="hover:bg-ink-50">
-                      <Td className="font-medium text-ink-900">{u.name}</Td>
+                      <Td className="font-medium text-ink-900">
+                        <EditableText value={u.name} onSave={(name) => rename(u, name)} />
+                      </Td>
                       <Td>{u.email}</Td>
                       <Td>
                         {u.tenant ? (

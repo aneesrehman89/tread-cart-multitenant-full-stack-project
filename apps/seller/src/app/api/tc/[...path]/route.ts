@@ -45,21 +45,41 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
   }
 
   const text = await upstream.text();
-  const payload = text ? JSON.parse(text) : null;
+
+  // Never assume the upstream body is JSON: a proxy error or an HTML error
+  // page would otherwise throw here and surface as an opaque 500.
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { error: { code: 'bad_upstream', message: text.slice(0, 500) } };
+    }
+  }
+
+  // 204 and 304 must not carry a body. NextResponse.json() always writes one,
+  // which throws — this is what made every logout fail with a 500.
+  if (upstream.status === 204 || upstream.status === 304) {
+    const empty = new NextResponse(null, { status: upstream.status });
+    if (suffix === 'auth/logout') empty.cookies.delete(SESSION_COOKIE);
+    return empty;
+  }
+
   const res = NextResponse.json(payload, { status: upstream.status });
 
   // Capture the token on a successful sign-in; clear it on sign-out.
   const issuesSession = suffix === 'auth/login' || suffix === 'auth/google/exchange';
-  if (issuesSession && upstream.ok && payload?.token) {
-    res.cookies.set(SESSION_COOKIE, payload.token, {
+  const session = payload as { token?: string; expiresAt?: string } | null;
+  if (issuesSession && upstream.ok && session?.token) {
+    res.cookies.set(SESSION_COOKIE, session.token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      expires: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
+      expires: session.expiresAt ? new Date(session.expiresAt) : undefined,
     });
     // Strip the token from the body so it never reaches the browser at all.
-    return NextResponse.json({ ...payload, token: undefined }, {
+    return NextResponse.json({ ...session, token: undefined }, {
       status: upstream.status,
       headers: res.headers,
     });

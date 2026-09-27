@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api, useApi } from '@/lib/api';
 import { Stepper } from '@/components/stepper';
 import { OtpInput } from '@/components/otp-input';
+import { PasswordInput } from '@/components/password-input';
 import { Button, Card, Field, Pill, inputClass } from '@/components/ui';
 import { GoogleButton } from '@/components/google-button';
 
@@ -159,11 +160,24 @@ export default function SignupPage() {
     );
   }
 
+  const [submitting, setSubmitting] = useState(false);
+
+  /**
+   * Submission deliberately does not clear its busy state on success: the
+   * status page is a separate route, and dropping the spinner the instant the
+   * request resolves left the button looking idle while the navigation was
+   * still in flight.
+   */
   async function submit() {
-    await run(
-      () => api(`signup/${applicationId}/submit`, { method: 'POST' }),
-      () => router.push(`/signup/${applicationId}/status`),
-    );
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api(`signup/${applicationId}/submit`, { method: 'POST' });
+      router.push(`/signup/${applicationId}/status`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not submit your application');
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -245,22 +259,21 @@ export default function SignupPage() {
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Password" hint="At least 10 characters">
-                <input
-                  type="password"
+                <PasswordInput
                   value={account.password}
-                  onChange={(e) => setAccount({ ...account, password: e.target.value })}
-                  className={inputClass}
+                  onChange={(v) => setAccount({ ...account, password: v })}
                   disabled={!!applicationId}
                 />
               </Field>
               <Field label="Confirm password">
-                <input
-                  type="password"
+                <PasswordInput
                   value={account.confirmPassword}
-                  onChange={(e) => setAccount({ ...account, confirmPassword: e.target.value })}
-                  className={inputClass}
+                  onChange={(v) => setAccount({ ...account, confirmPassword: v })}
                   disabled={!!applicationId}
                 />
+                {account.confirmPassword && account.password !== account.confirmPassword && (
+                  <span className="mt-1 block text-2xs text-red-600">Passwords do not match</span>
+                )}
               </Field>
             </div>
 
@@ -543,17 +556,34 @@ export default function SignupPage() {
             </dl>
 
             <div className="mt-6 flex justify-between">
-              <Button variant="secondary" onClick={() => setStep(2)} disabled={busy}>
+              <Button variant="secondary" onClick={() => setStep(2)} disabled={busy || submitting}>
                 Back
               </Button>
-              <Button onClick={submit} disabled={busy}>
-                {busy ? 'Submitting…' : 'Submit application'}
+              <Button onClick={submit} disabled={busy || submitting}>
+                {submitting ? (
+                  <>
+                    <Spinner />
+                    Submitting your application…
+                  </>
+                ) : (
+                  'Submit application'
+                )}
               </Button>
             </div>
           </Card>
         )}
       </div>
     </div>
+  );
+}
+
+/** Inline spinner, sized to sit inside a button's text line. */
+function Spinner() {
+  return (
+    <span
+      aria-hidden
+      className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+    />
   );
 }
 

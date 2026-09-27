@@ -39,9 +39,12 @@ interface Product {
   type: string;
   isActive: boolean;
   brand: { name: string };
+  images: { url: string | null; s3Key: string | null; alt: string | null }[];
   skus: Sku[];
   onHand: number;
   stockState: 'IN' | 'LOW' | 'OUT';
+  skusOut: number;
+  skusLow: number;
 }
 
 const TYPES = ['All', 'TIRE', 'WHEEL', 'ACCESSORY'] as const;
@@ -142,6 +145,7 @@ export default function ProductsPage() {
             <thead>
               <tr>
                 <Th className="w-10" />
+                <Th className="w-14">Image</Th>
                 <Th>Product</Th>
                 <Th>SKU / spec</Th>
                 <Th>Brand</Th>
@@ -163,7 +167,10 @@ export default function ProductsPage() {
                     />
                   </Td>
                   <Td>
-                    <p className="font-medium text-ink-900">{p.name}</p>
+                    <Thumb product={p} />
+                  </Td>
+                  <Td>
+                    <NameCell product={p} onSaved={reload} />
                     <p className="text-2xs text-ink-500">{titleCase(p.type)}</p>
                   </Td>
                   <Td>
@@ -184,6 +191,13 @@ export default function ProductsPage() {
                     {p.skus.map((s) => (
                       <StockCell key={s.id} sku={s} onSaved={reload} />
                     ))}
+                    {(p.skusOut > 0 || p.skusLow > 0) && p.skus.length > 1 && (
+                      <p className="mt-1 text-2xs text-ink-500">
+                        {p.skusOut > 0 && `${p.skusOut} out`}
+                        {p.skusOut > 0 && p.skusLow > 0 && ' · '}
+                        {p.skusLow > 0 && `${p.skusLow} low`}
+                      </p>
+                    )}
                   </Td>
                   <Td>
                     <Pill tone={p.isActive ? 'success' : 'neutral'}>
@@ -224,6 +238,84 @@ export default function ProductsPage() {
         />
       )}
     </Shell>
+  );
+}
+
+/** Product thumbnail, falling back to a letter tile when there is no image. */
+function Thumb({ product }: { product: Product }) {
+  const [failed, setFailed] = useState(false);
+  const src = product.images?.[0]?.url ?? null;
+
+  if (!src || failed) {
+    return (
+      <div className="grid h-11 w-11 place-items-center rounded-lg bg-ink-100 text-2xs font-medium text-ink-400">
+        {product.type === 'WHEEL' ? 'WHL' : 'TYR'}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={product.images[0]?.alt ?? product.name}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-11 w-11 rounded-lg object-cover"
+    />
+  );
+}
+
+/** Click the product name to rename it in place. */
+function NameCell({ product, onSaved }: { product: Product; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(product.name);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    const next = value.trim();
+    if (!next || next === product.name) {
+      setValue(product.name);
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`products/${product.id}`, { method: 'PATCH', body: JSON.stringify({ name: next }) });
+      onSaved();
+    } finally {
+      setBusy(false);
+      setEditing(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        title="Rename"
+        className="block text-left font-medium text-ink-900 hover:text-brand-700"
+      >
+        {product.name}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      value={value}
+      disabled={busy}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') void save();
+        if (e.key === 'Escape') {
+          setValue(product.name);
+          setEditing(false);
+        }
+      }}
+      className="w-full rounded border border-brand-400 px-1 py-0.5 text-sm focus:outline-none"
+    />
   );
 }
 
@@ -352,6 +444,7 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
     description: '',
     sku: '',
     price: '',
+    imageUrl: '',
     onHand: '0',
     reorderAt: '4',
     // Tire
@@ -387,6 +480,7 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
           type: form.type,
           brandName: form.brandName,
           description: form.description || null,
+          imageUrl: form.imageUrl.trim() || null,
           isActive: true,
           skus: [
             {
@@ -557,6 +651,31 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                   placeholder="35"
                 />
               </Field>
+            </div>
+          )}
+
+          <Field label="Product image URL" hint="Paste a link to a photo. Leave blank for a placeholder.">
+            <input
+              type="url"
+              value={form.imageUrl}
+              onChange={(e) => set('imageUrl', e.target.value)}
+              className={inputClass}
+              placeholder="https://images.example.com/tire.jpg"
+            />
+          </Field>
+
+          {form.imageUrl.trim() && (
+            <div className="flex items-center gap-3 rounded-lg border border-ink-200 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.imageUrl}
+                alt="Preview"
+                className="h-16 w-16 rounded-lg object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+              <span className="text-2xs text-ink-500">Preview — if nothing shows, the link is not a reachable image.</span>
             </div>
           )}
 

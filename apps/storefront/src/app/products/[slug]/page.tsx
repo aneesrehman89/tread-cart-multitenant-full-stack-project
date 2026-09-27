@@ -5,7 +5,7 @@ import { use, useState } from 'react';
 import { money, useApi } from '@/lib/api';
 import { useCart } from '@/lib/cart';
 import { ShopLayout } from '@/components/shop-chrome';
-import { ProductGlyph, specLabel, type Product } from '@/components/product';
+import { ProductImageBox, specLabel, type Product } from '@/components/product';
 import {
   Button,
   Card,
@@ -81,16 +81,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
               {/* Gallery */}
               <div>
                 <Card padded={false} className="overflow-hidden">
-                  <div className="grid h-80 place-items-center bg-gradient-to-br from-ink-100 to-ink-200">
-                    <div className="scale-[2.2]">
-                      <ProductGlyph type={product.type} />
-                    </div>
-                  </div>
+                  <ProductImageBox product={product} className="h-96" />
                 </Card>
-                <p className="mt-2 text-2xs text-ink-400">
-                  Product photography is not wired up yet — S3 uploads are implemented on the API
-                  but no images have been attached to this catalog.
-                </p>
               </div>
 
               {/* Buy box */}

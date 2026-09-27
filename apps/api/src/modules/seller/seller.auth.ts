@@ -141,6 +141,10 @@ sellerAuthRouter.get(
         brandPrimary: user.tenant.brandPrimary,
         brandAccent: user.tenant.brandAccent,
         logoUrl: user.tenant.logoUrl,
+        fontFamily: user.tenant.fontFamily,
+        buttonStyle: user.tenant.buttonStyle,
+        buttonWeight: user.tenant.buttonWeight,
+        cardStyle: user.tenant.cardStyle,
       },
     });
   }),

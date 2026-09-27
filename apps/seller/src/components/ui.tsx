@@ -16,7 +16,8 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-card border border-ink-200 bg-surface shadow-card ${padded ? 'p-5' : ''} ${className}`}
+      style={{ borderRadius: 'var(--card-radius, 12px)' }}
+      className={`border border-ink-200 bg-surface shadow-card ${padded ? 'p-5' : ''} ${className}`}
     >
       {children}
     </div>
@@ -183,8 +184,10 @@ export function Avatar({
 
 // --- buttons --------------------------------------------------------------
 
+// The primary variant is driven by CSS variables the store controls; the rest
+// stay neutral so destructive and secondary actions never blend into a brand.
 const BUTTON_VARIANTS = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300',
+  primary: 'text-[var(--btn-fg,#fff)] hover:brightness-110 disabled:opacity-60',
   secondary: 'bg-surface text-ink-700 ring-1 ring-inset ring-ink-300 hover:bg-ink-50',
   danger: 'bg-surface text-red-600 ring-1 ring-inset ring-red-300 hover:bg-red-50',
   ghost: 'text-ink-600 hover:bg-ink-100',
@@ -202,10 +205,21 @@ export function Button({
   size?: 'sm' | 'md';
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const sizes = { sm: 'px-2.5 py-1.5 text-xs', md: 'px-3.5 py-2 text-sm' };
+  const themed =
+    variant === 'primary'
+      ? {
+          backgroundColor: 'var(--btn-bg, #1F6B46)',
+          color: 'var(--btn-fg, #fff)',
+          border: '1px solid var(--btn-border, transparent)',
+          borderRadius: 'var(--btn-radius, 0.5rem)',
+        }
+      : { borderRadius: 'var(--btn-radius, 0.5rem)' };
+
   return (
     <button
       {...rest}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_VARIANTS[variant]} ${sizes[size]} ${className}`}
+      style={{ ...themed, ...rest.style }}
+      className={`inline-flex items-center justify-center gap-1.5 font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_VARIANTS[variant]} ${sizes[size]} ${className}`}
     >
       {children}
     </button>

@@ -8,6 +8,10 @@ export interface ResolvedTenant {
   brandPrimary: string;
   brandAccent: string;
   logoUrl: string | null;
+  fontFamily: string;
+  buttonStyle: string;
+  buttonWeight: string;
+  cardStyle: string;
 }
 
 export interface ShopCustomer {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api, number, relativeTime, useApi } from '@/lib/api';
 import { Shell, useRequireSeller } from '@/components/shell';
+import { EditableText } from '@/components/editable';
 import {
   Card,
   EmptyState,
@@ -51,6 +52,16 @@ export default function CustomersPage() {
     customers.reload();
   }
 
+  /** Splits a typed full name back into the two stored fields. */
+  async function setName(customerId: string, full: string) {
+    const [firstName, ...rest] = full.trim().split(/\s+/);
+    await api(`customers/${customerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ firstName: firstName ?? null, lastName: rest.join(' ') || null }),
+    });
+    customers.reload();
+  }
+
   const rows = customers.data?.customers ?? [];
 
   return (
@@ -92,7 +103,11 @@ export default function CustomersPage() {
               {rows.map((c) => (
                 <tr key={c.id} className="hover:bg-ink-50">
                   <Td className="font-medium text-ink-900">
-                    {[c.firstName, c.lastName].filter(Boolean).join(' ') || '—'}
+                    <EditableText
+                      value={[c.firstName, c.lastName].filter(Boolean).join(' ')}
+                      placeholder="Add a name"
+                      onSave={(name) => setName(c.id, name)}
+                    />
                   </Td>
                   <Td>{c.email}</Td>
                   <Td>{number(c._count.orders)}</Td>

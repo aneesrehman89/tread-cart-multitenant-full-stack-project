@@ -6,12 +6,20 @@ import { money } from '@/lib/api';
 import { useCart } from '@/lib/cart';
 import { Button, Card, Pill } from './ui';
 
+export interface ProductImage {
+  id?: string;
+  url: string | null;
+  s3Key: string | null;
+  alt: string | null;
+}
+
 export interface Product {
   id: string;
   slug: string;
   name: string;
   type: string;
   brand: { name: string };
+  images?: ProductImage[];
   skus: {
     id: string;
     sku: string;
@@ -55,9 +63,7 @@ export function ProductCard({ product }: { product: Product }) {
   return (
     <Card padded={false} className="flex flex-col overflow-hidden">
       <Link href={`/products/${product.slug}`} className="block">
-        <div className="grid h-36 place-items-center bg-gradient-to-br from-ink-100 to-ink-200">
-          <ProductGlyph type={product.type} />
-        </div>
+        <ProductImageBox product={product} className="h-40" />
       </Link>
 
       <div className="flex flex-1 flex-col p-3.5">
@@ -112,6 +118,46 @@ export function specLabel(type: string, s: Product['skus'][number]): string {
     return `${s.rimDiameterIn}×${s.wheelWidthIn} ${s.boltPattern ?? ''} ET${s.offsetMm ?? '—'}`;
   }
   return s.sku;
+}
+
+/**
+ * Product photography, falling back to a drawn glyph.
+ *
+ * Plain <img> rather than next/image: catalog images are arbitrary remote
+ * URLs a seller supplies, and next/image would need every one of those hosts
+ * allow-listed at build time.
+ */
+export function ProductImageBox({
+  product,
+  className = '',
+}: {
+  product: Pick<Product, 'type' | 'name' | 'images'>;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const image = product.images?.[0];
+  const src = image?.url ?? null;
+
+  if (!src || failed) {
+    return (
+      <div className={`grid place-items-center bg-gradient-to-br from-ink-100 to-ink-200 ${className}`}>
+        <ProductGlyph type={product.type} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`overflow-hidden bg-ink-100 ${className}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={image?.alt ?? product.name}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+      />
+    </div>
+  );
 }
 
 export function ProductGlyph({ type }: { type: string }) {

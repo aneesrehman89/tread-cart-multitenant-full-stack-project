@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api, relativeTime, useApi } from '@/lib/api';
 import { Shell, useRequireSeller } from '@/components/shell';
+import { EditableText } from '@/components/editable';
 import {
   Button,
   Card,
@@ -105,7 +106,13 @@ export default function StaffPage() {
               <tbody>
                 {users.data?.users.map((u) => (
                   <tr key={u.id} className="hover:bg-ink-50">
-                    <Td className="font-medium text-ink-900">{u.name}</Td>
+                    <Td className="font-medium text-ink-900">
+                      <EditableText
+                        value={u.name}
+                        onSave={(name) => patch(u.id, { name })}
+                        title="Rename this staff member"
+                      />
+                    </Td>
                     <Td>{u.email}</Td>
                     <Td>
                       <select
