@@ -17,6 +17,7 @@ import { platformRouter } from './modules/platform/index.js';
 import { sellerRouter } from './modules/seller/index.js';
 import { shopRouter } from './modules/shop/index.js';
 import { stripeWebhookHandler } from './modules/shop/webhook.routes.js';
+import { customerGoogleRouter } from './modules/shop/customer-google.js';
 
 export function createApp(): Express {
   const app = express();
@@ -76,6 +77,11 @@ export function createApp(): Express {
   // The seller dashboard takes its tenant from the session, not a header, so
   // it also mounts before the tenant middleware.
   app.use('/v1/seller', sellerRouter);
+
+  // Shopper OAuth. Mounted outside the tenant middleware because Google
+  // redirects back here with no tenant header — the store travels in the
+  // signed state parameter instead.
+  app.use('/v1/customer', customerGoogleRouter);
 
   // Everything below this line runs inside a resolved tenant's database.
   app.use('/v1', resolveTenant);

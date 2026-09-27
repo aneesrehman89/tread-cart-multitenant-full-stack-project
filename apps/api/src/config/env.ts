@@ -42,6 +42,10 @@ const schema = z.object({
   GOOGLE_REDIRECT_URI: z
     .string()
     .default('http://localhost:4000/v1/seller/auth/google/callback'),
+  // Second redirect URI on the same OAuth client, for shoppers.
+  GOOGLE_CUSTOMER_REDIRECT_URI: z
+    .string()
+    .default('http://localhost:4000/v1/customer/auth/google/callback'),
 
   // Where to bounce browsers back to after an external redirect.
   SELLER_APP_URL: z.string().default('http://localhost:3001'),

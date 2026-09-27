@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { api, useApi } from '@/lib/api';
 import { ShopLayout, type Shopper } from '@/components/shop-chrome';
 import { Button, Card, ErrorNote, Field, Loading, Pill, inputClass } from '@/components/ui';
+import { GoogleButton } from '@/components/google-button';
+import { useApi as useApiHook } from '@/lib/api';
 
 /**
  * Account page. A signed-out visitor gets sign-in / register here, but the
@@ -79,6 +81,7 @@ export default function AccountPage() {
 }
 
 function SignedOut({ onDone }: { onDone: () => void }) {
+  const providers = useApiHook<{ google: boolean }>('auth/providers');
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '' });
   const [busy, setBusy] = useState(false);
@@ -115,6 +118,17 @@ function SignedOut({ onDone }: { onDone: () => void }) {
         </p>
 
         {error && <div className="mt-4"><ErrorNote message={error} /></div>}
+
+        {providers.data?.google && (
+          <div className="mt-5">
+            <GoogleButton next="/account" />
+            <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-ink-200" />
+            <span className="text-2xs text-ink-400">or use your email</span>
+            <span className="h-px flex-1 bg-ink-200" />
+          </div>
+          </div>
+        )}
 
         <form onSubmit={submit} className="mt-5 space-y-4">
           {mode === 'register' && (

@@ -4,6 +4,12 @@ import { useState } from 'react';
 import { api, money, number, useApi } from '@/lib/api';
 import { Shell, useRequireSeller } from '@/components/shell';
 import {
+  describeSize,
+  parseTireSize,
+  parseWheelSize,
+  suggestSkuCode,
+} from '@/lib/size-parser';
+import {
   Button,
   Card,
   EmptyState,
@@ -436,26 +442,29 @@ function StockCell({ sku, onSaved }: { sku: Sku; onSaved: () => void }) {
   );
 }
 
+/**
+ * Add product.
+ *
+ * Only what a SKU genuinely needs: size, price, stock and a code. The size
+ * is typed the way it is written on the sidewall and parsed into the
+ * structured columns behind it, rather than asking for section width,
+ * aspect ratio and rim diameter as three separate numbers.
+ */
 function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState({
     name: '',
     brandName: '',
     type: 'TIRE',
-    description: '',
-    sku: '',
+    size: '',
     price: '',
-    imageUrl: '',
     onHand: '0',
+    // Behind "More options".
+    sku: '',
+    imageUrl: '',
     reorderAt: '4',
-    // Tire
-    sectionWidthMm: '',
-    aspectRatio: '',
-    rimDiameterIn: '',
-    // Wheel
-    wheelWidthIn: '',
-    boltPattern: '',
-    offsetMm: '',
+    description: '',
   });
+  const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -465,13 +474,44 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
 
   const isTire = form.type === 'TIRE';
   const slug = form.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const parsed = describeSize(form.type, form.size);
+  const sizeInvalid = form.size.trim().length > 0 && parsed === null;
+  const skuCode = form.sku.trim() || suggestSkuCode(form.brandName, form.size);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (sizeInvalid) {
+      setError('That size is not one we recognise — check the format below the field.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
-      const num = (v: string) => (v.trim() === '' ? null : Number(v));
+      // Expand the one size field back into the columns the catalog filters on.
+      const attrs = isTire
+        ? (() => {
+            const t = parseTireSize(form.size);
+            return t
+              ? {
+                  sectionWidthMm: t.sectionWidthMm,
+                  aspectRatio: t.aspectRatio,
+                  rimDiameterIn: t.rimDiameterIn,
+                }
+              : {};
+          })()
+        : (() => {
+            const w = parseWheelSize(form.size);
+            return w
+              ? {
+                  rimDiameterIn: w.rimDiameterIn,
+                  wheelWidthIn: w.wheelWidthIn,
+                  boltPattern: w.boltPattern,
+                  offsetMm: w.offsetMm,
+                }
+              : {};
+          })();
+
       await api('products', {
         method: 'POST',
         body: JSON.stringify({
@@ -484,22 +524,11 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
           isActive: true,
           skus: [
             {
-              sku: form.sku,
+              sku: skuCode,
               basePriceCents: Math.round(Number.parseFloat(form.price) * 100),
               onHand: Number.parseInt(form.onHand, 10) || 0,
               reorderAt: Number.parseInt(form.reorderAt, 10) || 0,
-              ...(isTire
-                ? {
-                    sectionWidthMm: num(form.sectionWidthMm),
-                    aspectRatio: num(form.aspectRatio),
-                    rimDiameterIn: num(form.rimDiameterIn),
-                  }
-                : {
-                    wheelWidthIn: num(form.wheelWidthIn),
-                    rimDiameterIn: num(form.rimDiameterIn),
-                    boltPattern: form.boltPattern || null,
-                    offsetMm: num(form.offsetMm),
-                  }),
+              ...attrs,
             },
           ],
         }),
@@ -518,7 +547,9 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-card bg-surface p-6 shadow-pop"
       >
         <h2 className="text-lg font-semibold text-ink-900">Add product</h2>
-        <p className="mt-1 text-xs text-ink-500">Creates the product and its first SKU.</p>
+        <p className="mt-1 text-xs text-ink-500">
+          Creates the product and its first SKU. Everything else can be edited later.
+        </p>
 
         {error && (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -534,7 +565,7 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
                 className={inputClass}
-                placeholder="Meridian GT Sport 225/45R17"
+                placeholder={isTire ? 'Achilles ATR Sport 2' : 'Rohana RFX11'}
               />
             </Field>
             <Field label="Brand" hint="Created if it does not exist">
@@ -543,16 +574,19 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 value={form.brandName}
                 onChange={(e) => set('brandName', e.target.value)}
                 className={inputClass}
-                placeholder="Meridian"
+                placeholder={isTire ? 'Achilles' : 'Rohana'}
               />
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Type">
               <select
                 value={form.type}
-                onChange={(e) => set('type', e.target.value)}
+                onChange={(e) => {
+                  set('type', e.target.value);
+                  set('size', '');
+                }}
                 className={inputClass}
               >
                 <option value="TIRE">Tire</option>
@@ -560,15 +594,39 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 <option value="ACCESSORY">Accessory</option>
               </select>
             </Field>
-            <Field label="SKU code">
-              <input
-                required
-                value={form.sku}
-                onChange={(e) => set('sku', e.target.value.toUpperCase())}
-                className={inputClass}
-                placeholder="MER-22545R17"
-              />
-            </Field>
+
+            {form.type !== 'ACCESSORY' && (
+              <Field
+                label="Size"
+                hint={
+                  isTire
+                    ? 'As written on the sidewall, e.g. 225/45R17'
+                    : 'Diameter × width, e.g. 18x8.5 5x114.3 ET35'
+                }
+              >
+                <input
+                  required
+                  value={form.size}
+                  onChange={(e) => set('size', e.target.value)}
+                  className={`${inputClass} ${sizeInvalid ? 'border-red-400' : ''}`}
+                  placeholder={isTire ? '225/45R17' : '18x8.5 5x114.3 ET35'}
+                />
+              </Field>
+            )}
+          </div>
+
+          {/* Reads back what the size was understood to mean, so a typo is
+              caught before it becomes a mis-filtered listing. */}
+          {form.type !== 'ACCESSORY' && form.size.trim() && (
+            <p
+              className={`-mt-1 text-2xs ${sizeInvalid ? 'text-red-600' : 'text-brand-600'}`}
+              aria-live="polite"
+            >
+              {parsed ?? 'Not a size we recognise — check the format above.'}
+            </p>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Price (USD)">
               <input
                 required
@@ -578,110 +636,12 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 value={form.price}
                 onChange={(e) => set('price', e.target.value)}
                 className={inputClass}
-                placeholder="189.00"
+                placeholder="129.00"
               />
             </Field>
-          </div>
-
-          {isTire ? (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Section width (mm)">
-                <input
-                  type="number"
-                  value={form.sectionWidthMm}
-                  onChange={(e) => set('sectionWidthMm', e.target.value)}
-                  className={inputClass}
-                  placeholder="225"
-                />
-              </Field>
-              <Field label="Aspect ratio">
-                <input
-                  type="number"
-                  value={form.aspectRatio}
-                  onChange={(e) => set('aspectRatio', e.target.value)}
-                  className={inputClass}
-                  placeholder="45"
-                />
-              </Field>
-              <Field label="Rim (in)">
-                <input
-                  type="number"
-                  value={form.rimDiameterIn}
-                  onChange={(e) => set('rimDiameterIn', e.target.value)}
-                  className={inputClass}
-                  placeholder="17"
-                />
-              </Field>
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-4">
-              <Field label="Rim (in)">
-                <input
-                  type="number"
-                  value={form.rimDiameterIn}
-                  onChange={(e) => set('rimDiameterIn', e.target.value)}
-                  className={inputClass}
-                  placeholder="18"
-                />
-              </Field>
-              <Field label="Width (in)">
-                <input
-                  type="number"
-                  step="0.5"
-                  value={form.wheelWidthIn}
-                  onChange={(e) => set('wheelWidthIn', e.target.value)}
-                  className={inputClass}
-                  placeholder="8.5"
-                />
-              </Field>
-              <Field label="Bolt pattern">
-                <input
-                  value={form.boltPattern}
-                  onChange={(e) => set('boltPattern', e.target.value)}
-                  className={inputClass}
-                  placeholder="5x114.3"
-                />
-              </Field>
-              <Field label="Offset (mm)">
-                <input
-                  type="number"
-                  value={form.offsetMm}
-                  onChange={(e) => set('offsetMm', e.target.value)}
-                  className={inputClass}
-                  placeholder="35"
-                />
-              </Field>
-            </div>
-          )}
-
-          <Field label="Product image URL" hint="Paste a link to a photo. Leave blank for a placeholder.">
-            <input
-              type="url"
-              value={form.imageUrl}
-              onChange={(e) => set('imageUrl', e.target.value)}
-              className={inputClass}
-              placeholder="https://images.example.com/tire.jpg"
-            />
-          </Field>
-
-          {form.imageUrl.trim() && (
-            <div className="flex items-center gap-3 rounded-lg border border-ink-200 p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={form.imageUrl}
-                alt="Preview"
-                className="h-16 w-16 rounded-lg object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = 'none';
-                }}
-              />
-              <span className="text-2xs text-ink-500">Preview — if nothing shows, the link is not a reachable image.</span>
-            </div>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Stock on hand">
               <input
+                required
                 type="number"
                 min="0"
                 value={form.onHand}
@@ -689,23 +649,84 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 className={inputClass}
               />
             </Field>
-            <Field label="Reorder at">
-              <input
-                type="number"
-                min="0"
-                value={form.reorderAt}
-                onChange={(e) => set('reorderAt', e.target.value)}
-                className={inputClass}
-              />
-            </Field>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            aria-expanded={showMore}
+            className="text-xs font-medium text-brand-600 hover:underline"
+          >
+            {showMore ? '− Fewer options' : '+ More options (SKU code, image, reorder point)'}
+          </button>
+
+          {showMore && (
+            <div className="space-y-4 rounded-lg border border-ink-200 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="SKU code" hint={skuCode ? `Defaults to ${skuCode}` : 'Auto-generated'}>
+                  <input
+                    value={form.sku}
+                    onChange={(e) => set('sku', e.target.value.toUpperCase())}
+                    className={inputClass}
+                    placeholder={skuCode || 'ACH-22545R17'}
+                  />
+                </Field>
+                <Field label="Reorder at" hint="Flags the SKU as low below this">
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.reorderAt}
+                    onChange={(e) => set('reorderAt', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Product image URL" hint="Leave blank for a placeholder">
+                <input
+                  type="url"
+                  value={form.imageUrl}
+                  onChange={(e) => set('imageUrl', e.target.value)}
+                  className={inputClass}
+                  placeholder="https://images.example.com/tire.jpg"
+                />
+              </Field>
+
+              {form.imageUrl.trim() && (
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={form.imageUrl}
+                    alt="Preview"
+                    className="h-16 w-16 rounded-lg object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
+                    }}
+                  />
+                  <span className="text-2xs text-ink-500">
+                    Preview — if nothing shows, the link is not a reachable image.
+                  </span>
+                </div>
+              )}
+
+              <Field label="Description">
+                <textarea
+                  rows={2}
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  className={inputClass}
+                  placeholder="What makes this product worth buying?"
+                />
+              </Field>
+            </div>
+          )}
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || sizeInvalid}>
             {busy ? 'Creating…' : 'Add product'}
           </Button>
         </div>

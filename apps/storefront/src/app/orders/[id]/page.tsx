@@ -55,6 +55,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const justPaid = search.get('paid') === '1';
 
   const { data, error, loading, reload } = useApi<OrderDetail>(`orders/${id}`);
+  // Whether this environment can actually send a receipt.
+  const mail = useApi<{ email: boolean }>('auth/providers');
 
   const stage = data ? JOURNEY.indexOf(data.status as (typeof JOURNEY)[number]) : -1;
   const cancelled = data?.status === 'CANCELLED' || data?.status === 'REFUNDED';
@@ -73,10 +75,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   ✓
                 </span>
                 <h1 className="mt-4 text-xl font-semibold text-ink-900">Order placed!</h1>
+                {/* Only claims a receipt was sent when one actually can be. */}
                 <p className="mt-1.5 text-xs text-ink-500">
-                  Order <strong className="text-ink-800">{data.number}</strong> — confirmation sent
-                  to {data.email}
+                  Order <strong className="text-ink-800">{data.number}</strong>
+                  {mail.data?.email
+                    ? ` — confirmation sent to ${data.email}`
+                    : ' — placed successfully'}
                 </p>
+                {mail.data && !mail.data.email && (
+                  <p className="mt-1 text-2xs text-ink-400">
+                    Email receipts are not configured on this environment, so nothing was sent.
+                  </p>
+                )}
                 <div className="mt-5 flex justify-center gap-2">
                   <Link href="/orders">
                     <Button>Track order</Button>

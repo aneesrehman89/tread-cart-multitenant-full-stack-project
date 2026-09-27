@@ -81,7 +81,7 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
                 typeof session.payment_intent === 'string' ? session.payment_intent : null,
             },
           });
-          await markOrderPaid(db, orderId);
+          await markOrderPaid(db, orderId, tenantSlug);
           logger.info({ orderId, tenantSlug }, 'order marked paid from Stripe');
         }
         break;

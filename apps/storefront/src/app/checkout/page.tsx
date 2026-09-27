@@ -16,6 +16,7 @@ import {
   Pill,
   inputClass,
 } from '@/components/ui';
+import { GoogleButton } from '@/components/google-button';
 
 /**
  * Checkout: Browse → Cart → **Sign in / register → address → pay** → order.
@@ -142,6 +143,7 @@ function Checkout() {
 
 /** Step 1 — sign in or create an account, without leaving checkout. */
 function AccountStep({ onDone }: { onDone: () => void }) {
+  const providers = useApi<{ google: boolean }>('auth/providers');
   const [mode, setMode] = useState<'login' | 'register'>('register');
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '' });
   const [busy, setBusy] = useState(false);
@@ -180,6 +182,18 @@ function AccountStep({ onDone }: { onDone: () => void }) {
       <p className="mt-0.5 text-xs text-ink-500">
         We need an account to send your order confirmation and track delivery.
       </p>
+
+      {providers.data?.google && (
+        <div className="mt-4">
+          {/* Returns to checkout, not the account page — the cart is waiting. */}
+          <GoogleButton next="/checkout" />
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-ink-200" />
+            <span className="text-2xs text-ink-400">or use your email</span>
+            <span className="h-px flex-1 bg-ink-200" />
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 flex gap-1 rounded-lg bg-ink-100 p-1">
         {(['register', 'login'] as const).map((m) => (

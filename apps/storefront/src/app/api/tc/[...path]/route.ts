@@ -16,7 +16,10 @@ const API_URL = process.env.TREADCART_API_URL ?? 'http://localhost:4000';
 
 async function forward(req: NextRequest, path: string[]): Promise<NextResponse> {
   const suffix = path.join('/');
-  const url = new URL(`${API_URL}/v1/shop/${suffix}`);
+  // Customer OAuth lives outside the tenant-scoped shop routes, because
+  // Google redirects back to the API with no tenant header.
+  const base = suffix.startsWith('auth/google') ? 'customer' : 'shop';
+  const url = new URL(`${API_URL}/v1/${base}/${suffix}`);
   url.search = req.nextUrl.search;
 
   const jar = await cookies();
@@ -72,7 +75,8 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
   const res = NextResponse.json(payload, { status: upstream.status });
 
   // Capture the token on a successful sign-in; clear it on sign-out.
-  const issuesSession = suffix === 'auth/login' || suffix === 'auth/register';
+  const issuesSession =
+    suffix === 'auth/login' || suffix === 'auth/register' || suffix === 'auth/google/exchange';
   const session = payload as { token?: string; expiresAt?: string } | null;
   if (issuesSession && upstream.ok && session?.token) {
     res.cookies.set(SESSION_COOKIE, session.token, {

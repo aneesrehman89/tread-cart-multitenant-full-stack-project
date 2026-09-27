@@ -6,6 +6,9 @@ import { controlDb } from '../../db/control.js';
 import { asyncHandler } from '../../middleware/error.js';
 import { badRequest, conflict, notFound, unprocessable } from '../../lib/errors.js';
 import { isProduction } from '../../config/env.js';
+import { sendMail } from '../../lib/mailer.js';
+import { sendSms } from '../../lib/sms.js';
+import { verificationEmail } from '../../lib/email-templates.js';
 import { logger } from '../../lib/logger.js';
 
 /**
@@ -24,12 +27,58 @@ function generateCode(): string {
 }
 
 /**
- * In development the codes are returned in the response so the wizard can be
- * completed without a mail or SMS provider. In production they must only ever
- * be delivered out of band.
+ * Codes are echoed back to the client only for channels that did not actually
+ * deliver.
+ *
+ * Keyed on real delivery rather than on "is a provider configured": a
+ * configured provider that rejects the send (an unverified Resend domain, a
+ * Twilio trial number) would otherwise leave the applicant with no code at
+ * all and no way past the step. Never echoed in production.
  */
-function exposeCodes(emailCode: string, phoneCode: string) {
-  return isProduction ? {} : { devEmailCode: emailCode, devPhoneCode: phoneCode };
+function exposeCodes(
+  emailCode: string,
+  phoneCode: string,
+  delivery: { emailSent: boolean; smsSent: boolean },
+) {
+  if (isProduction) return {};
+  return {
+    ...(delivery.emailSent ? {} : { devEmailCode: emailCode }),
+    ...(delivery.smsSent ? {} : { devPhoneCode: phoneCode }),
+  };
+}
+
+/**
+ * Delivery is fire-and-forget from the caller's point of view: a provider
+ * outage must not fail a signup, and the seller can always resend.
+ */
+async function deliverCodes(opts: {
+  email: string;
+  name: string;
+  emailCode: string;
+  phone: string | null;
+  phoneCode: string;
+}): Promise<{ emailSent: boolean; smsSent: boolean; emailError?: string }> {
+  const [mail, sms] = await Promise.all([
+    sendMail(
+      verificationEmail({
+        to: opts.email,
+        name: opts.name,
+        code: opts.emailCode,
+        purpose: 'seller-signup',
+      }),
+    ),
+    opts.phone
+      ? sendSms(opts.phone, `${opts.phoneCode} is your TreadCart verification code.`)
+      : Promise.resolve({ delivered: false }),
+  ]);
+
+  return {
+    emailSent: mail.delivered,
+    smsSent: sms.delivered,
+    // Surfaced so the wizard can explain a provider rejection instead of
+    // silently showing a code with no reason.
+    ...(mail.error ? { emailError: mail.error } : {}),
+  };
 }
 
 const startSchema = z
@@ -81,13 +130,25 @@ sellerSignupRouter.post(
       ? await controlDb.sellerApplication.update({ where: { id: existing.id }, data })
       : await controlDb.sellerApplication.create({ data });
 
-    logger.info({ applicationId: application.id, email }, 'seller application started');
+    const delivery = await deliverCodes({
+      email,
+      name: body.contactName,
+      emailCode,
+      phone: application.phone,
+      phoneCode,
+    });
+
+    logger.info({ applicationId: application.id, email, ...delivery }, 'seller application started');
 
     res.status(201).json({
       applicationId: application.id,
       email,
       phone: application.phone,
-      ...exposeCodes(emailCode, phoneCode),
+      // The UI uses these to say "check your inbox" versus "not configured".
+      emailSent: delivery.emailSent,
+      smsSent: delivery.smsSent,
+      ...(isProduction || !delivery.emailError ? {} : { emailError: delivery.emailError }),
+      ...exposeCodes(emailCode, phoneCode, delivery),
     });
   }),
 );
@@ -147,7 +208,31 @@ sellerSignupRouter.post(
       data: channel === 'email' ? { emailCode: code } : { phoneCode: code },
     });
 
-    res.json({ sent: channel, ...(isProduction ? {} : { devCode: code }) });
+    let sent = false;
+    if (channel === 'email') {
+      const result = await sendMail(
+        verificationEmail({
+          to: application.email,
+          name: application.contactName,
+          code,
+          purpose: 'seller-signup',
+        }),
+      );
+      sent = result.delivered;
+    } else if (application.phone) {
+      const result = await sendSms(
+        application.phone,
+        `${code} is your TreadCart verification code.`,
+      );
+      sent = result.delivered;
+    }
+
+    res.json({
+      channel,
+      sent,
+      // Same rule as signup: only hide the code when it genuinely went out.
+      ...(isProduction || sent ? {} : { devCode: code }),
+    });
   }),
 );
 

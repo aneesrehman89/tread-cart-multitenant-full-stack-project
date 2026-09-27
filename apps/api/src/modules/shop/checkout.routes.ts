@@ -8,6 +8,9 @@ import { resolvePrices } from '../pricing/pricing.service.js';
 import { badRequest, notFound, unprocessable } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
+import { mailConfigured, sendMail } from '../../lib/mailer.js';
+import { orderConfirmationEmail } from '../../lib/email-templates.js';
+import { controlDb } from '../../db/control.js';
 import type { PrismaClient as TenantPrismaClient } from '../../generated/tenant/index.js';
 
 export const checkoutRouter: Router = Router();
@@ -239,6 +242,7 @@ checkoutRouter.post(
         order: { id: order.id, number: order.number, totalCents: order.totalCents },
         paymentUrl: null,
         stripeConfigured: false,
+        emailConfigured: mailConfigured(),
         message:
           'Stripe is not configured. Set STRIPE_SECRET_KEY to a test key to complete payment.',
       });
@@ -306,6 +310,7 @@ checkoutRouter.post(
       order: { id: order.id, number: order.number, totalCents: order.totalCents },
       paymentUrl: session.url,
       stripeConfigured: true,
+      emailConfigured: mailConfigured(),
     });
   }),
 );
@@ -333,8 +338,9 @@ checkoutRouter.post(
     if (!order) throw notFound('Order not found');
     if (order.status !== 'AWAITING_PAYMENT') throw badRequest('This order is not awaiting payment');
 
-    await markOrderPaid(db, order.id);
-    res.json({ ok: true, simulated: true });
+    const { tenant } = requireTenantContext(req);
+    await markOrderPaid(db, order.id, tenant.slug);
+    res.json({ ok: true, simulated: true, emailSent: mailConfigured() });
   }),
 );
 
@@ -369,7 +375,13 @@ export async function releaseOrder(
  * Turns a reservation into a real stock decrement and marks the order paid.
  * Shared by the Stripe webhook and the dev simulation so both behave the same.
  */
-export async function markOrderPaid(db: TenantPrismaClient, orderId: string): Promise<void> {
+export async function markOrderPaid(
+  db: TenantPrismaClient,
+  orderId: string,
+  tenantSlug?: string,
+): Promise<void> {
+  let justPaid = false;
+
   await db.$transaction(async (tx) => {
     const order = await tx.order.findUniqueOrThrow({
       where: { id: orderId },
@@ -378,6 +390,7 @@ export async function markOrderPaid(db: TenantPrismaClient, orderId: string): Pr
 
     // Idempotent: a webhook can be delivered more than once.
     if (order.status !== 'AWAITING_PAYMENT') return;
+    justPaid = true;
 
     for (const item of order.items) {
       await tx.inventoryItem.update({
@@ -397,4 +410,52 @@ export async function markOrderPaid(db: TenantPrismaClient, orderId: string): Pr
       data: { orderId, status: 'PAID', note: 'Payment confirmed' },
     });
   });
+
+  // Sent after the transaction commits, and only on the transition — a
+  // repeated webhook must not email the customer twice.
+  if (justPaid && tenantSlug) {
+    await sendOrderConfirmation(db, orderId, tenantSlug).catch((err: unknown) =>
+      logger.error({ err, orderId }, 'order confirmation email failed'),
+    );
+  }
+}
+
+/** Emails the buyer their receipt. Never throws into the payment path. */
+async function sendOrderConfirmation(
+  db: TenantPrismaClient,
+  orderId: string,
+  tenantSlug: string,
+): Promise<void> {
+  if (!mailConfigured()) {
+    logger.warn({ orderId }, 'order confirmation not sent — no email provider configured');
+    return;
+  }
+
+  const [order, tenant] = await Promise.all([
+    db.order.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { items: true, customer: true },
+    }),
+    controlDb.tenant.findUnique({ where: { slug: tenantSlug } }),
+  ]);
+
+  await sendMail(
+    orderConfirmationEmail({
+      to: order.email,
+      name: order.customer?.firstName ?? null,
+      storeName: tenant?.name ?? 'TreadCart',
+      brand: tenant?.brandPrimary ?? '#0F5132',
+      orderNumber: order.number,
+      items: order.items.map((i) => ({
+        name: i.nameSnapshot,
+        quantity: i.quantity,
+        unitPriceCents: i.unitPriceCents,
+      })),
+      subtotalCents: order.subtotalCents,
+      shippingCents: order.shippingCents,
+      taxCents: order.taxCents,
+      totalCents: order.totalCents,
+      orderUrl: `${env.STOREFRONT_URL}/orders/${order.id}`,
+    }),
+  );
 }
