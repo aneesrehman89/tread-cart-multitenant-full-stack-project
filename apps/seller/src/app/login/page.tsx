@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, useApi } from '@/lib/api';
 import { Button, Field, inputClass } from '@/components/ui';
+import { GoogleButton } from '@/components/google-button';
 
 interface StoreChoice {
   slug: string;
@@ -17,6 +18,7 @@ export default function SellerLoginPage() {
   const [choices, setChoices] = useState<StoreChoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const providers = useApi<{ google: boolean }>('auth/providers');
 
   async function submit(e: React.FormEvent, slug?: string) {
     e.preventDefault();
@@ -127,6 +129,17 @@ export default function SellerLoginPage() {
               <Button type="submit" disabled={busy} className="mt-6 w-full">
                 {busy ? 'Signing in…' : 'Sign in'}
               </Button>
+
+              {providers.data?.google && (
+                <>
+                  <div className="my-5 flex items-center gap-3">
+                    <span className="h-px flex-1 bg-ink-200" />
+                    <span className="text-2xs text-ink-400">or</span>
+                    <span className="h-px flex-1 bg-ink-200" />
+                  </div>
+                  <GoogleButton label="Sign in with Google" />
+                </>
+              )}
             </>
           )}
 

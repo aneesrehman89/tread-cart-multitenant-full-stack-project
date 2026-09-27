@@ -8,6 +8,7 @@ import { invalidateTenantLookup } from '../../middleware/tenant.js';
 import { asyncHandler } from '../../middleware/error.js';
 import { sellerSignupRouter } from './signup.routes.js';
 import { sellerAuthRouter } from './seller.auth.js';
+import { googleRouter } from './google.routes.js';
 import { sellerDashboardRouter } from './dashboard.routes.js';
 import { sellerProductsRouter } from './products.routes.js';
 import { sellerOrdersRouter } from './orders.routes.js';
@@ -25,6 +26,7 @@ export const sellerRouter: Router = Router();
 
 // Public: signing up and signing in both happen without a session.
 sellerRouter.use('/signup', sellerSignupRouter);
+sellerRouter.use('/auth', googleRouter);
 sellerRouter.use('/auth', sellerAuthRouter);
 
 // Everything past this point is a signed-in seller acting on their own store.

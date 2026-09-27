@@ -31,7 +31,7 @@ platformAuthRouter.post(
       where: { email: email.toLowerCase(), tenantId: null, role: 'PLATFORM_ADMIN', isActive: true },
     });
 
-    const ok = user ? await verifyPassword(user.passwordHash, password) : false;
+    const ok = user?.passwordHash ? await verifyPassword(user.passwordHash, password) : false;
     if (!user || !ok) throw unauthorized('Invalid email or password');
 
     const token = generateOpaqueToken();
@@ -115,6 +115,9 @@ platformAuthRouter.post(
       where: { id: req.actor!.staffUserId },
     });
 
+    if (!user.passwordHash) {
+      throw badRequest('This account signs in with Google and has no password to change');
+    }
     if (!(await verifyPassword(user.passwordHash, body.currentPassword))) {
       throw unauthorized('Current password is incorrect');
     }

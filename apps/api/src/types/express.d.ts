@@ -10,6 +10,16 @@ export interface ResolvedTenant {
   logoUrl: string | null;
 }
 
+export interface ShopCustomer {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  groupId: string | null;
+  groupName: string | null;
+  sessionId: string;
+}
+
 export interface AuthenticatedActor {
   sessionId: string;
   staffUserId: string;
@@ -26,6 +36,8 @@ declare global {
       /** Prisma client bound to the resolved tenant's own database. */
       db?: TenantPrismaClient;
       actor?: AuthenticatedActor;
+      /** Storefront shopper, distinct from staff (actor). */
+      customer?: ShopCustomer;
       requestId?: string;
     }
   }

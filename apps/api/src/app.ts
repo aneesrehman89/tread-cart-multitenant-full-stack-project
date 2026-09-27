@@ -15,6 +15,8 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { platformRouter } from './modules/platform/index.js';
 import { sellerRouter } from './modules/seller/index.js';
+import { shopRouter } from './modules/shop/index.js';
+import { stripeWebhookHandler } from './modules/shop/webhook.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -44,9 +46,14 @@ export function createApp(): Express {
   // Health checks are deliberately outside tenant resolution and rate limiting.
   app.use(healthRouter);
 
-  // Stripe signs the raw bytes, so the webhook route must not be JSON-parsed.
-  // Mount it before express.json() once the billing module lands:
-  //   app.post('/v1/webhooks/stripe', express.raw({ type: 'application/json' }), handler)
+  // Stripe signs the raw bytes it sent, so this must be mounted BEFORE
+  // express.json() — parsing and re-serialising would break the signature.
+  // It resolves its own tenant from the event metadata, not a header.
+  app.post(
+    '/v1/webhooks/stripe',
+    express.raw({ type: 'application/json' }),
+    stripeWebhookHandler,
+  );
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -74,6 +81,10 @@ export function createApp(): Express {
   app.use('/v1', resolveTenant);
   app.use('/v1/auth', authRouter);
   app.use('/v1/catalog', catalogRouter);
+
+  // The public storefront: same tenant resolution, shopper sessions instead
+  // of staff ones.
+  app.use('/v1/shop', shopRouter);
 
   // Echoes the resolved tenant and its brand tokens; the storefront calls this
   // on boot to theme itself.

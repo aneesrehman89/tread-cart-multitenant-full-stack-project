@@ -209,28 +209,7 @@ sellerSignupRouter.patch(
   }),
 );
 
-const kycSchema = z.object({
-  kycDocType: z.enum(['CNIC', 'PASSPORT', 'DRIVING_LICENCE', 'BUSINESS_REG']),
-  // S3 object keys from a signed upload, not the files themselves.
-  kycFrontKey: z.string().min(1),
-  kycBackKey: z.string().min(1).optional(),
-});
-
-/** Step 4: identity documents. */
-sellerSignupRouter.patch(
-  '/:id/kyc',
-  asyncHandler(async (req, res) => {
-    const application = await loadDraft(req.params.id!);
-    const body = kycSchema.parse(req.body);
-    const updated = await controlDb.sellerApplication.update({
-      where: { id: application.id },
-      data: body,
-    });
-    res.json(publicView(updated));
-  }),
-);
-
-/** Step 5: submit for review. Everything required must be present by now. */
+/** Final step: submit for review. Everything required must be present by now. */
 sellerSignupRouter.post(
   '/:id/submit',
   asyncHandler(async (req, res) => {
@@ -238,10 +217,11 @@ sellerSignupRouter.post(
 
     const missing: string[] = [];
     if (!application.emailVerifiedAt) missing.push('email verification');
-    if (!application.phoneVerifiedAt) missing.push('phone verification');
+    // Google accounts have no phone until the seller adds one, and Google has
+    // already proved the email, so phone verification only gates local signups.
+    if (application.phone && !application.phoneVerifiedAt) missing.push('phone verification');
     if (!application.storeName || !application.storeSlug) missing.push('store page');
     if (!application.legalName || !application.taxId) missing.push('business details');
-    if (!application.kycFrontKey) missing.push('KYC document');
 
     if (missing.length > 0) {
       throw unprocessable(`Cannot submit yet — still missing: ${missing.join(', ')}`);

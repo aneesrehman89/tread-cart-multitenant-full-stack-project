@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { api, useApi } from '@/lib/api';
 import { Stepper } from '@/components/stepper';
 import { OtpInput } from '@/components/otp-input';
 import { Button, Card, Field, Pill, inputClass } from '@/components/ui';
+import { GoogleButton } from '@/components/google-button';
 
 /**
  * Seller signup. Each step writes to the API before advancing, so a half
@@ -15,8 +16,10 @@ import { Button, Card, Field, Pill, inputClass } from '@/components/ui';
  */
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [applicationId, setApplicationId] = useState<string | null>(null);
+  const providers = useApi<{ google: boolean }>('auth/providers');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -54,8 +57,33 @@ export default function SignupPage() {
     country: 'PK',
   });
 
-  // Step 4
-  const [kyc, setKyc] = useState({ kycDocType: 'CNIC', frontName: '', backName: '' });
+  // Coming back from Google: the API created the application and verified the
+  // email already, so drop the seller straight into the store page step.
+  useEffect(() => {
+    const fromGoogle = searchParams.get('application');
+    const oauthError = searchParams.get('error');
+    if (oauthError) setError(decodeURIComponent(oauthError));
+    if (!fromGoogle) return;
+
+    setApplicationId(fromGoogle);
+    api<{ emailVerifiedAt: string | null; contactName: string; email: string; phone: string | null }>(
+      `signup/${fromGoogle}`,
+    )
+      .then((a) => {
+        setAccount((prev) => ({
+          ...prev,
+          contactName: a.contactName,
+          email: a.email,
+          phone: a.phone ?? '',
+        }));
+        setEmailVerified(!!a.emailVerifiedAt);
+        // Google proves the email, and no phone was collected, so neither
+        // verification is outstanding — go straight to the store page.
+        setPhoneVerified(true);
+        setStep(1);
+      })
+      .catch(() => setError('That Google sign-up could not be resumed. Please start again.'));
+  }, [searchParams]);
 
   async function run<T>(fn: () => Promise<T>, onDone?: (r: T) => void) {
     setBusy(true);
@@ -131,25 +159,6 @@ export default function SignupPage() {
     );
   }
 
-  async function saveKyc() {
-    await run(
-      () =>
-        api(`signup/${applicationId}/kyc`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            kycDocType: kyc.kycDocType,
-            // A real upload would sign a PUT to S3 and send back the object
-            // key; the file picker here records the filename in its place.
-            kycFrontKey: `applications/${applicationId}/${kyc.frontName || 'front.jpg'}`,
-            ...(kyc.backName
-              ? { kycBackKey: `applications/${applicationId}/${kyc.backName}` }
-              : {}),
-          }),
-        }),
-      () => setStep(4),
-    );
-  }
-
   async function submit() {
     await run(
       () => api(`signup/${applicationId}/submit`, { method: 'POST' }),
@@ -188,6 +197,17 @@ export default function SignupPage() {
               This is what you&apos;ll use to sign in to your store dashboard once you&apos;re
               approved.
             </p>
+
+            {!applicationId && providers.data?.google && (
+              <div className="mt-6">
+                <GoogleButton />
+                <div className="my-5 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-ink-200" />
+                  <span className="text-2xs text-ink-400">or sign up with email</span>
+                  <span className="h-px flex-1 bg-ink-200" />
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <Field label="Full name">
@@ -502,61 +522,8 @@ export default function SignupPage() {
           </Card>
         )}
 
-        {/* ---------------- Step 4: KYC ---------------- */}
+        {/* ---------------- Step 4: review ---------------- */}
         {step === 3 && (
-          <Card>
-            <h1 className="text-lg font-semibold text-ink-900">Identity verification</h1>
-            <p className="mt-1 text-xs text-ink-500">
-              Upload a government ID for the person who owns this account. Reviewed by the platform
-              team, usually within 2 business days.
-            </p>
-
-            <div className="mt-6">
-              <Field label="Document type">
-                <select
-                  value={kyc.kycDocType}
-                  onChange={(e) => setKyc({ ...kyc, kycDocType: e.target.value })}
-                  className={`${inputClass} max-w-xs`}
-                >
-                  <option value="CNIC">CNIC</option>
-                  <option value="PASSPORT">Passport</option>
-                  <option value="DRIVING_LICENCE">Driving licence</option>
-                  <option value="BUSINESS_REG">Business registration</option>
-                </select>
-              </Field>
-            </div>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <FilePick
-                label="Front of document"
-                value={kyc.frontName}
-                onPick={(name) => setKyc({ ...kyc, frontName: name })}
-              />
-              <FilePick
-                label="Back of document"
-                hint="Optional for a passport"
-                value={kyc.backName}
-                onPick={(name) => setKyc({ ...kyc, backName: name })}
-              />
-            </div>
-
-            <p className="mt-4 rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-2xs text-ink-600">
-              Files are not actually uploaded in this build — the filename is recorded as the S3
-              object key so the review flow can be exercised end to end. Wiring this to a signed
-              S3 PUT is the remaining piece.
-            </p>
-
-            <StepNav
-              onBack={() => setStep(2)}
-              onNext={saveKyc}
-              busy={busy}
-              nextDisabled={!kyc.frontName}
-            />
-          </Card>
-        )}
-
-        {/* ---------------- Step 5: review ---------------- */}
-        {step === 4 && (
           <Card>
             <h1 className="text-lg font-semibold text-ink-900">Review &amp; submit</h1>
             <p className="mt-1 text-xs text-ink-500">
@@ -573,11 +540,10 @@ export default function SignupPage() {
                 label="Address"
                 value={`${business.addressLine1}, ${business.city}, ${business.region} ${business.postalCode}`}
               />
-              <Row label="ID document" value={`${kyc.kycDocType} · ${kyc.frontName}`} />
             </dl>
 
             <div className="mt-6 flex justify-between">
-              <Button variant="secondary" onClick={() => setStep(3)} disabled={busy}>
+              <Button variant="secondary" onClick={() => setStep(2)} disabled={busy}>
                 Back
               </Button>
               <Button onClick={submit} disabled={busy}>
@@ -629,35 +595,5 @@ function DevCode({ label, code }: { label: string; code: string }) {
     <p className="mt-2 text-2xs text-ink-500">
       Dev mode — {label}: <code className="font-mono font-semibold text-ink-700">{code}</code>
     </p>
-  );
-}
-
-function FilePick({
-  label,
-  hint,
-  value,
-  onPick,
-}: {
-  label: string;
-  hint?: string;
-  value: string;
-  onPick: (name: string) => void;
-}) {
-  return (
-    <Field label={label} hint={hint}>
-      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-ink-300 px-3 py-6 text-xs text-ink-500 hover:border-brand-400 hover:bg-brand-50/40">
-        <input
-          type="file"
-          accept="image/*,application/pdf"
-          className="sr-only"
-          onChange={(e) => onPick(e.target.files?.[0]?.name ?? '')}
-        />
-        {value ? (
-          <span className="font-medium text-brand-700">{value}</span>
-        ) : (
-          <span>+ Choose a file</span>
-        )}
-      </label>
-    </Field>
   );
 }

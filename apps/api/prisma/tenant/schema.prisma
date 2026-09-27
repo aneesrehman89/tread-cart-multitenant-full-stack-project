@@ -222,6 +222,7 @@ model Customer {
 
   orders    Order[]
   addresses Address[]
+  sessions  CustomerSession[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
@@ -307,4 +308,27 @@ model ProcessedWebhook {
   id          String   @id // Stripe event id
   type        String
   processedAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// STOREFRONT SESSIONS
+// Customers are per-store, so their sessions live in the tenant database
+// alongside them rather than in the control plane.
+// ---------------------------------------------------------------------------
+
+model CustomerSession {
+  id         String    @id @default(cuid())
+  // Peppered SHA-256 of an opaque token, same scheme as staff sessions.
+  tokenHash  String    @unique
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([expiresAt])
 }

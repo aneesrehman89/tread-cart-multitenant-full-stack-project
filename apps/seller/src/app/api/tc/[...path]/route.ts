@@ -49,7 +49,8 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
   const res = NextResponse.json(payload, { status: upstream.status });
 
   // Capture the token on a successful sign-in; clear it on sign-out.
-  if (suffix === 'auth/login' && upstream.ok && payload?.token) {
+  const issuesSession = suffix === 'auth/login' || suffix === 'auth/google/exchange';
+  if (issuesSession && upstream.ok && payload?.token) {
     res.cookies.set(SESSION_COOKIE, payload.token, {
       httpOnly: true,
       sameSite: 'lax',

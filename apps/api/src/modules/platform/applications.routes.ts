@@ -129,7 +129,10 @@ applicationsRouter.post(
         data: {
           email: application.email,
           name: application.contactName,
+          // One of these is always set: a local password, or a Google account.
           passwordHash: application.passwordHash,
+          googleId: application.googleId,
+          avatarUrl: application.avatarUrl,
           role: 'TENANT_OWNER',
           tenantId,
         },

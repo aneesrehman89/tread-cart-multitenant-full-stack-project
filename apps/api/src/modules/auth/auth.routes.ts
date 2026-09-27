@@ -30,7 +30,8 @@ authRouter.post(
 
     // Same response whether the address is unknown or the password is wrong,
     // so this endpoint cannot be used to enumerate accounts.
-    const ok = user ? await verifyPassword(user.passwordHash, password) : false;
+    // A Google-only account has no local hash and cannot sign in this way.
+    const ok = user?.passwordHash ? await verifyPassword(user.passwordHash, password) : false;
     if (!user || !ok) throw unauthorized('Invalid email or password');
 
     const token = generateOpaqueToken();

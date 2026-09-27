@@ -36,6 +36,17 @@ const schema = z.object({
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
   CHECKOUT_SIGNING_SECRET: z.string().min(16),
 
+  // --- OAuth ---
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
+  GOOGLE_REDIRECT_URI: z
+    .string()
+    .default('http://localhost:4000/v1/seller/auth/google/callback'),
+
+  // Where to bounce browsers back to after an external redirect.
+  SELLER_APP_URL: z.string().default('http://localhost:3001'),
+  STOREFRONT_URL: z.string().default('http://localhost:3000'),
+
   STRIPE_SECRET_KEY: z.string().default(''),
   STRIPE_WEBHOOK_SECRET: z.string().default(''),
 

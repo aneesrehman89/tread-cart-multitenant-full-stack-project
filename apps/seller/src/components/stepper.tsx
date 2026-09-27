@@ -1,6 +1,6 @@
 'use client';
 
-export const SIGNUP_STEPS = ['Account', 'Store page', 'Business info', 'KYC', 'Review'] as const;
+export const SIGNUP_STEPS = ['Account', 'Store page', 'Business info', 'Review'] as const;
 export type SignupStep = (typeof SIGNUP_STEPS)[number];
 
 /** The numbered progress rail across the top of the signup wizard. */

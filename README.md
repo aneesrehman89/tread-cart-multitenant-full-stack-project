@@ -29,6 +29,8 @@ TreadCart/
 │     ├─ modules/platform/     cross-tenant control plane (the admin API)
 │     ├─ db/fanout.ts          query every tenant database at once
 │     └─ scripts/              tenant provisioner and seed
+├─ apps/storefront/          customer storefront (Next.js, port 3000)
+├─ apps/seller/              seller dashboard (Next.js, port 3001)
 ├─ apps/admin/               platform admin console (Next.js App Router)
 │  └─ src/
 │     ├─ app/api/tc/           server-side proxy; holds the token in a cookie
@@ -51,9 +53,17 @@ pnpm seed
 pnpm dev
 ```
 
-`pnpm dev` runs both apps: the API on <http://localhost:4000> and the admin
-console on <http://localhost:3002>. Sign in with `admin@treadcart.test` /
-`Treadcart!2345`. (`pnpm dev:api` and `pnpm dev:admin` run them separately.)
+`pnpm dev` runs all four:
+
+| App | URL | Sign in with |
+| --- | --- | --- |
+| Customer storefront | <http://localhost:3000> | register at checkout |
+| Seller dashboard | <http://localhost:3001> | `owner@apexauto.test` |
+| Platform admin | <http://localhost:3002> | `admin@treadcart.test` |
+| API | <http://localhost:4000> | — |
+
+Password for every seeded account is `Treadcart!2345`. Run one at a time with
+`pnpm dev:api`, `pnpm dev:shop`, `pnpm dev:seller` or `pnpm dev:admin`.
 
 Postgres is published on **5433** and Redis on **6380** so they cannot collide
 with anything already installed locally.
@@ -285,6 +295,76 @@ password `treadcart`. Redis:
 docker exec -it treadcart-redis redis-cli --scan --pattern 't:*'
 ```
 
+## The storefront and checkout
+
+`apps/storefront` is the customer-facing shop. It serves one store, chosen by
+`TREADCART_STORE` in development (`apexauto` by default); in production the
+API resolves the tenant from the hostname instead.
+
+The checkout deliberately follows:
+
+> Browse → Add to cart → Checkout → **Sign in / register** → Address → Pay → Order
+
+Authentication happens *inside* checkout rather than up front, so a visitor
+fills a cart as a guest and only creates an account once they have decided to
+buy. Signing in re-prices the cart, because trade and fleet customers have
+their own pricing.
+
+### The cart holds no prices
+
+Only SKU ids and quantities live in the browser. Every price, discount, tax
+and total is resolved server-side against the shopper's customer group, so a
+cart edited in devtools changes what you are buying, never what it costs.
+
+### Payment
+
+Stripe Checkout, hosted — card details never reach this app's servers.
+
+1. `POST /v1/shop/checkout/place` prices the cart again, checks stock, writes
+   the order as `AWAITING_PAYMENT` and **reserves** the stock, then creates a
+   Stripe Checkout Session.
+2. The shopper pays on Stripe.
+3. `POST /v1/webhooks/stripe` turns the reservation into a real decrement and
+   marks the order `PAID`.
+
+The webhook is mounted with `express.raw()` **before** the JSON parser, since
+Stripe signs the exact bytes it sent. It is idempotent: inserting the Stripe
+event id into `ProcessedWebhook` is what claims the work, so a redelivery is a
+no-op. Expired or failed checkouts release the reservation.
+
+To take real payments, put a Stripe **test** secret key in `.env`:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_your_key_here
+```
+
+Then forward webhooks to the local API:
+
+```bash
+stripe listen --forward-to localhost:4000/v1/webhooks/stripe
+```
+
+Without a key the checkout still creates the order, says so plainly, and
+offers a **development-only** "simulate payment" button. That endpoint refuses
+to run in production and refuses once Stripe *is* configured, so it can never
+become a way to skip paying.
+
+## Seller sign-up with Google
+
+`apps/seller` offers "Continue with Google" alongside email sign-up. Google has
+already verified the address, so those applications skip email verification.
+The button only appears when the API reports Google is configured:
+
+```bash
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-secret
+GOOGLE_REDIRECT_URI=http://localhost:4000/v1/seller/auth/google/callback
+```
+
+Create the credentials at <https://console.cloud.google.com/apis/credentials>
+and add that exact redirect URI. **This flow is written but untested** — it
+needs real Google credentials, which this environment does not have.
+
 ## Not built yet
 
 The scope these foundations were built for, in the order I would tackle it:
@@ -295,7 +375,10 @@ The scope these foundations were built for, in the order I would tackle it:
   marks where the raw-body route must mount (before `express.json()`).
 - **S3 uploads.** `lib/s3.ts` is complete (signed PUT/GET, tenant-namespaced
   keys) but no route calls it yet.
-- **Customer storefront.** The admin console is built; the storefront is not.
+- **Product images.** S3 upload helpers exist but no route or UI calls them,
+  so the storefront draws placeholder glyphs.
+- **Seller screens** for collections, returns, discounts, delivery zones and
+  reviews — each needs new tenant models.
 - **Campaigns and performance** tabs on Marketing need an events pipeline;
   only the banners tab is wired up.
 - Inventory reservation between checkout and payment (`reserved` is modelled,

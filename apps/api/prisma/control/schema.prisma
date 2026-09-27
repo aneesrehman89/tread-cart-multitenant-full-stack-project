@@ -74,8 +74,11 @@ model TenantDomain {
 model StaffUser {
   id           String    @id @default(cuid())
   email        String
-  passwordHash String
+  // Null for accounts that sign in with Google and have no local password.
+  passwordHash String?
   name         String
+  googleId     String?   @unique
+  avatarUrl    String?
   role         StaffRole
   isActive     Boolean   @default(true)
 
@@ -233,9 +236,14 @@ model SellerApplication {
 
   // --- Step 1: account ---
   email        String  @unique
-  passwordHash String
+  // Null for accounts created through Google, which have no local password.
+  passwordHash String?
   contactName  String
-  phone        String
+  phone        String?
+
+  // Set when the account came from Google rather than email + password.
+  googleId     String? @unique
+  avatarUrl    String?
 
   // Verification is proved before the application can be submitted.
   emailVerifiedAt DateTime?
@@ -261,11 +269,6 @@ model SellerApplication {
   region     String?
   postalCode String?
   country    String? @default("PK")
-
-  // --- Step 4: KYC ---
-  kycDocType  String?
-  kycFrontKey String?
-  kycBackKey  String?
 
   // --- Review ---
   status       ApplicationStatus @default(DRAFT)

@@ -37,9 +37,6 @@ interface Application {
   region: string | null;
   postalCode: string | null;
   country: string | null;
-  kycDocType: string | null;
-  kycFrontKey: string | null;
-  kycBackKey: string | null;
   submittedAt: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
@@ -206,12 +203,6 @@ function ApplicationDetail({ id, onChanged }: { id: string; onChanged: () => voi
                   : '—'
               }
             />
-          </Group>
-
-          <Group title="KYC documents">
-            <Row label="Type" value={data.kycDocType ?? '—'} />
-            <Row label="Front" value={data.kycFrontKey ?? 'Not provided'} mono />
-            <Row label="Back" value={data.kycBackKey ?? 'Not provided'} mono />
           </Group>
 
           <Group title="Branding">

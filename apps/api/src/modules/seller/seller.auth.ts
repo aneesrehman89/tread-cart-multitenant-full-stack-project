@@ -46,6 +46,9 @@ sellerAuthRouter.post(
     // enumerate which addresses are staff at which store.
     let matched: (typeof candidates)[number] | null = null;
     for (const candidate of candidates) {
+      // A Google-only account has no hash to compare against; it must use
+      // "Continue with Google" rather than a password.
+      if (!candidate.passwordHash) continue;
       if (await verifyPassword(candidate.passwordHash, password)) {
         matched = candidate;
         break;
@@ -57,7 +60,7 @@ sellerAuthRouter.post(
     if (!storeSlug && candidates.length > 1) {
       const verified = [];
       for (const c of candidates) {
-        if (await verifyPassword(c.passwordHash, password)) {
+        if (c.passwordHash && (await verifyPassword(c.passwordHash, password))) {
           verified.push({ slug: c.tenant!.slug, name: c.tenant!.name });
         }
       }
