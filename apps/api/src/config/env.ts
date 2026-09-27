@@ -47,6 +47,21 @@ const schema = z.object({
   SELLER_APP_URL: z.string().default('http://localhost:3001'),
   STOREFRONT_URL: z.string().default('http://localhost:3000'),
 
+  // --- Email ---
+  // Pick ONE: a Resend API key, or SMTP credentials. With neither, verification
+  // codes are logged instead of sent and the UI says so rather than pretending.
+  RESEND_API_KEY: z.string().default(''),
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASSWORD: z.string().default(''),
+  MAIL_FROM: z.string().default('TreadCart <onboarding@resend.dev>'),
+
+  // --- SMS (Twilio) ---
+  TWILIO_ACCOUNT_SID: z.string().default(''),
+  TWILIO_AUTH_TOKEN: z.string().default(''),
+  TWILIO_FROM_NUMBER: z.string().default(''),
+
   STRIPE_SECRET_KEY: z.string().default(''),
   STRIPE_WEBHOOK_SECRET: z.string().default(''),
 
