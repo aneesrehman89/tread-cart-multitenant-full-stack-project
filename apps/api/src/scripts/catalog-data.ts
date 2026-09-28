@@ -1,11 +1,4 @@
-/**
- * Demo catalog.
- *
- * Photography is hotlinked from Unsplash (free licence, no attribution
- * required) rather than uploaded to S3, so the seed needs no bucket and no
- * binaries in the repo. Real stores upload their own, which is why
- * ProductImage carries either an `s3Key` or a `url`.
- */
+// Demo images are hotlinked from Unsplash, so seeding needs no S3 bucket.
 
 const IMG = (id: string) => `https://images.unsplash.com/photo-${id}?w=900&q=70&auto=format&fit=crop`;
 

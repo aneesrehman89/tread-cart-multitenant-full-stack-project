@@ -37,8 +37,7 @@ function Listing() {
   const router = useRouter();
   const params = useSearchParams();
 
-  // Filters live in the URL, so a filtered view is shareable and the back
-  // button behaves the way people expect.
+  // Filters live in the URL so views are shareable.
   const setParam = useCallback(
     (key: string, value: string | null) => {
       const next = new URLSearchParams(params.toString());

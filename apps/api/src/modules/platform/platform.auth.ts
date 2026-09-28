@@ -17,11 +17,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-/**
- * Platform sign-in. Unlike the tenant login this runs with no tenant context
- * at all, and only PLATFORM_ADMIN accounts (tenantId = null) can use it, so a
- * store owner cannot reach the platform console with their store credentials.
- */
+// Only PLATFORM_ADMIN (tenantId = null) can sign in here.
 platformAuthRouter.post(
   '/login',
   asyncHandler(async (req, res) => {

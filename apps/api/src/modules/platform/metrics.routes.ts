@@ -9,12 +9,7 @@ export const metricsRouter: Router = Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAID_STATUSES = ['PAID', 'FULFILLING', 'SHIPPED', 'DELIVERED'] as const;
 
-/**
- * Dashboard figures, aggregated across every tenant database.
- *
- * Cached for 60s: it is a fan-out of several queries per tenant, and the
- * numbers on a marketplace overview do not need to be second-accurate.
- */
+// Cross-tenant fan-out, cached for 60s.
 metricsRouter.get(
   '/dashboard',
   asyncHandler(async (_req, res) => {
@@ -68,11 +63,7 @@ metricsRouter.get(
       const orderCount = sum((v) => v.orderCount);
       const prevOrderCount = sum((v) => v.prevOrderCount);
 
-      // Merge every tenant's orders into a trend series.
-      //
-      // Bucketed into multi-day periods rather than single days: at this order
-      // volume a daily series is mostly zeros with isolated spikes, which reads
-      // as noise instead of a trend. Each point is the total for BUCKET_DAYS.
+      // Bucketed into multi-day periods so low volume doesn't read as noise.
       const BUCKET_DAYS = 3;
       const bucketCount = Math.ceil(30 / BUCKET_DAYS);
       const buckets = new Map<string, number>();

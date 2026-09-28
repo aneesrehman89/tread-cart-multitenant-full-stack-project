@@ -1,6 +1,2 @@
-/**
- * Name of the httpOnly cookie this app sets on its own origin to hold the
- * opaque API token. Kept out of the route file because a Next.js route module
- * may only export request handlers.
- */
+// Lives outside the route file because route modules may only export handlers.
 export const SESSION_COOKIE = 'tc_admin_session';

@@ -1,9 +1,4 @@
-// ---------------------------------------------------------------------------
-// CONTROL PLANE
-// One database for the whole platform. Knows which tenants exist, where each
-// tenant's database lives, who the staff users are, and which sessions are
-// live. Nothing here is tenant business data.
-// ---------------------------------------------------------------------------
+// --- Control plane: tenants, staff and sessions (no tenant business data) ---
 
 generator client {
   provider = "prisma-client-js"
@@ -49,8 +44,7 @@ model Tenant {
   brandAccent  String  @default("#84CC16")
   logoUrl      String?
 
-  // The rest of the white-label theme. Structure, spacing and type scale stay
-  // fixed across every store; only these tokens are a store's to change.
+  // White-label theme tokens a store may change.
   fontFamily  String @default("inter")   // inter | dm-sans | manrope | source-serif | space-grotesk
   buttonStyle String @default("rounded") // rounded | pill | square
   buttonWeight String @default("solid")  // solid | soft | outline
@@ -104,8 +98,7 @@ model StaffUser {
   @@index([email])
 }
 
-// Opaque-token sessions. We never store the token itself, only a peppered
-// SHA-256 of it, so a control-DB leak cannot be replayed against the API.
+// Only a peppered SHA-256 of the token is stored.
 model Session {
   id          String    @id @default(cuid())
   tokenHash   String    @unique
@@ -123,12 +116,7 @@ model Session {
   @@index([expiresAt])
 }
 
-// ---------------------------------------------------------------------------
-// PLATFORM OPERATIONS
-// Support and marketing live in the control plane, not in tenant databases:
-// the platform team works across every tenant at once, and a fan-out query per
-// keystroke would not be usable.
-// ---------------------------------------------------------------------------
+// --- Platform operations: support and banners live in the control plane ---
 
 enum TicketStatus {
   OPEN
@@ -152,8 +140,7 @@ model SupportTicket {
   status   TicketStatus   @default(OPEN)
   priority TicketPriority @default(MEDIUM)
 
-  // Who raised it. Tenant customers are referenced by email rather than by a
-  // foreign key, because their row lives in a different database.
+  // Customers live in tenant DBs, so they're referenced by email, not FK.
   tenantId       String
   tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   requesterName  String
@@ -223,12 +210,7 @@ model PlatformBanner {
   @@index([status])
 }
 
-// ---------------------------------------------------------------------------
-// SELLER ONBOARDING
-// A seller signs up before a tenant exists, so the application cannot live in
-// a tenant database. It sits here until the platform team approves it, and
-// approval is what provisions the store's database and its owner account.
-// ---------------------------------------------------------------------------
+// --- Seller onboarding: applications live here until approval provisions the store ---
 
 enum ApplicationStatus {
   DRAFT        // still filling in the wizard
@@ -255,8 +237,7 @@ model SellerApplication {
   // Verification is proved before the application can be submitted.
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
-  // Dev-only plaintext codes. Replace with a hashed, expiring code and a real
-  // email/SMS provider before production.
+  // Dev-only plaintext codes; hash and expire before production.
   emailCode String?
   phoneCode String?
 

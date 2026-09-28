@@ -2,14 +2,7 @@
 
 import { useState } from 'react';
 
-/**
- * Click-to-edit text cell.
- *
- * Tables here were read-only for fields that obviously should not be —
- * a staff member's name, a product's title. Enter or blur saves, Escape
- * reverts, and a failed save puts the original value back rather than
- * silently keeping an edit the server rejected.
- */
+// Click-to-edit cell: Enter/blur saves, Escape reverts, failed save restores the original.
 export function EditableText({
   value,
   onSave,

@@ -1,8 +1,4 @@
-// ---------------------------------------------------------------------------
-// TENANT SCHEMA
-// Applied identically to every tenant database. There is no tenantId column
-// anywhere in here on purpose: isolation is the database boundary itself.
-// ---------------------------------------------------------------------------
+// --- Tenant schema: applied to every tenant DB; isolation is the DB boundary, so no tenantId ---
 
 generator client {
   provider = "prisma-client-js"
@@ -11,8 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // Overridden per request at runtime via `datasources.db.url`. The value here
-  // is only used by the CLI when running migrations against one tenant.
+  // Overridden per request at runtime; used only by the CLI.
   url      = env("TENANT_DATABASE_URL")
 }
 
@@ -85,11 +80,9 @@ model ProductImage {
   id        String  @id @default(cuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  // S3 object key for images uploaded to this platform. URLs are signed on
-  // read so the bucket stays private.
+  // Private S3 object key; URLs are signed on read.
   s3Key     String?
-  // A fully qualified external URL, for catalog images hosted elsewhere.
-  // Exactly one of s3Key or url is set; the API resolves whichever is present.
+  // External image URL; exactly one of s3Key or url is set.
   url       String?
   alt       String?
   position  Int     @default(0)
@@ -97,8 +90,7 @@ model ProductImage {
   @@index([productId])
 }
 
-// The sellable unit. Tire and wheel attributes are nullable because one table
-// carries both; `type` on the parent Product says which set is meaningful.
+// Tire and wheel attributes are nullable; Product.type says which apply.
 model Sku {
   id        String  @id @default(cuid())
   sku       String  @unique
@@ -194,8 +186,7 @@ model CustomerGroup {
   prices    CustomerGroupPrice[]
 }
 
-// SKU-level price override for one group. `priceCents` wins outright when set;
-// otherwise `discountBps` is applied to the SKU base price.
+// priceCents wins when set, otherwise discountBps applies to the base price.
 model CustomerGroupPrice {
   id      String        @id @default(cuid())
   groupId String
@@ -306,19 +297,14 @@ model OrderEvent {
   @@index([orderId])
 }
 
-// Every Stripe event id we have already handled. Webhooks are retried and
-// delivered out of order, so processing is gated on inserting this row.
+// Handled Stripe event ids, for idempotent webhook processing.
 model ProcessedWebhook {
   id          String   @id // Stripe event id
   type        String
   processedAt DateTime @default(now())
 }
 
-// ---------------------------------------------------------------------------
-// STOREFRONT SESSIONS
-// Customers are per-store, so their sessions live in the tenant database
-// alongside them rather than in the control plane.
-// ---------------------------------------------------------------------------
+// --- Storefront sessions: customers are per store, so their sessions are too ---
 
 model CustomerSession {
   id         String    @id @default(cuid())

@@ -119,8 +119,7 @@ export default function StoresPage() {
                       {t.databaseName}
                     </code>
                   </Td>
-                  {/* Only active stores are queried, so a suspended store has
-                      no figures rather than genuinely zero ones. */}
+                  {/* Only active stores are queried, so suspended stores show no figures. */}
                   {t.status !== 'ACTIVE' || t.statsError ? (
                     <>
                       <Td className="text-2xs text-ink-400" >
@@ -175,11 +174,7 @@ export default function StoresPage() {
   );
 }
 
-/**
- * Onboarding really provisions: the API creates a Postgres database, pushes
- * the tenant schema into it and creates the owner account. It takes a few
- * seconds, so the dialog says so rather than looking hung.
- */
+// Provisioning creates a new database and takes a few seconds.
 function OnboardDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState({
     name: '',

@@ -18,14 +18,7 @@ const loginSchema = z.object({
   storeSlug: z.string().optional(),
 });
 
-/**
- * Seller sign-in.
- *
- * Unlike the storefront API this takes no X-Tenant-Slug header: a seller
- * should not have to know their tenant slug to log in. The tenant is derived
- * from the staff record, and every later request reads it from the session, so
- * a seller cannot aim their session at another store by changing a header.
- */
+// No tenant header: the tenant comes from the staff record.
 sellerAuthRouter.post(
   '/login',
   asyncHandler(async (req, res) => {
@@ -42,12 +35,10 @@ sellerAuthRouter.post(
       include: { tenant: true },
     });
 
-    // Verify a password before revealing anything, so this cannot be used to
-    // enumerate which addresses are staff at which store.
+    // Check the password before revealing anything, to prevent enumeration.
     let matched: (typeof candidates)[number] | null = null;
     for (const candidate of candidates) {
-      // A Google-only account has no hash to compare against; it must use
-      // "Continue with Google" rather than a password.
+      // Google-only accounts have no password hash.
       if (!candidate.passwordHash) continue;
       if (await verifyPassword(candidate.passwordHash, password)) {
         matched = candidate;

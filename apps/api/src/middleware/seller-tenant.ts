@@ -3,15 +3,7 @@ import { controlDb } from '../db/control.js';
 import { acquire, getTenantClient, release } from '../db/tenant-registry.js';
 import { forbidden, unauthorized, badRequest } from '../lib/errors.js';
 
-/**
- * Resolves the tenant for a seller request from the **session**, never from a
- * header.
- *
- * The storefront API trusts X-Tenant-Slug because the caller is the store's
- * own frontend. A seller dashboard must not: if the tenant came from a header
- * a signed-in seller could point their session at another store's database by
- * editing one request. The staff record decides, and nothing else.
- */
+// Seller tenant comes from the session only, so a header can't point it at another store.
 export async function resolveSellerTenant(
   req: Request,
   res: Response,

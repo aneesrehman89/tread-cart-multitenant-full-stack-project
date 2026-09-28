@@ -1,13 +1,6 @@
 import type { Mail } from './mailer.js';
 
-/**
- * Email templates.
- *
- * Deliberately plain HTML with inline styles and a table-free layout: mail
- * clients strip <style> blocks, ignore most modern CSS, and Gmail clips
- * anything over ~102 KB. Every template also carries a text/plain part,
- * because a mail with no text part scores badly with spam filters.
- */
+// Inline styles only (mail clients strip <style>), always with a text/plain part.
 
 const BRAND = '#0F5132';
 

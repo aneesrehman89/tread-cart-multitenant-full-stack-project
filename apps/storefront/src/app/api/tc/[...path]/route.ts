@@ -2,22 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '@/lib/session';
 
-/**
- * Server-side proxy to the TreadCart storefront API.
- *
- * The browser never sees the opaque API token. It is captured from the login
- * response here and stored in an httpOnly cookie on this app's own origin,
- * then replayed as a bearer header on every later call. That keeps the token
- * out of JavaScript entirely, which is the whole point of an opaque token, and
- * avoids needing third-party cookies between :3000 and :4000.
- */
+// Proxies to the API and keeps the opaque token in an httpOnly cookie, out of browser JS.
 
 const API_URL = process.env.TREADCART_API_URL ?? 'http://localhost:4000';
 
 async function forward(req: NextRequest, path: string[]): Promise<NextResponse> {
   const suffix = path.join('/');
-  // Customer OAuth lives outside the tenant-scoped shop routes, because
-  // Google redirects back to the API with no tenant header.
+  // Customer OAuth routes sit outside the tenant-scoped /shop routes.
   const base = suffix.startsWith('auth/google') ? 'customer' : 'shop';
   const url = new URL(`${API_URL}/v1/${base}/${suffix}`);
   url.search = req.nextUrl.search;
@@ -32,8 +23,7 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
   };
   if (token) headers.authorization = `Bearer ${token}`;
 
-  // Pass the caller's identity through, or every session row would record this
-  // proxy instead of the device that actually signed in.
+  // Forward client identity so sessions record the real device, not this proxy.
   const ua = req.headers.get('user-agent');
   if (ua) headers['user-agent'] = ua;
   const forwardedFor = req.headers.get('x-forwarded-for');
@@ -53,8 +43,7 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
 
   const text = await upstream.text();
 
-  // Never assume the upstream body is JSON: a proxy error or an HTML error
-  // page would otherwise throw here and surface as an opaque 500.
+  // Upstream may return HTML on errors, so don't assume JSON.
   let payload: unknown = null;
   if (text) {
     try {
@@ -64,8 +53,7 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
     }
   }
 
-  // 204 and 304 must not carry a body. NextResponse.json() always writes one,
-  // which throws — this is what made every logout fail with a 500.
+  // 204/304 must not carry a body; NextResponse.json() would throw.
   if (upstream.status === 204 || upstream.status === 304) {
     const empty = new NextResponse(null, { status: upstream.status });
     if (suffix === 'auth/logout') empty.cookies.delete(SESSION_COOKIE);

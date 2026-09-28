@@ -8,11 +8,7 @@ import { Button, Card, ErrorNote, Field, Loading, Pill, inputClass } from '@/com
 import { GoogleButton } from '@/components/google-button';
 import { useApi as useApiHook } from '@/lib/api';
 
-/**
- * Account page. A signed-out visitor gets sign-in / register here, but the
- * main path into an account is the checkout flow — nobody is asked to create
- * one before they have decided to buy something.
- */
+// Sign-in is available here, but most accounts are created at checkout.
 export default function AccountPage() {
   const me = useApi<Shopper>('auth/me');
 

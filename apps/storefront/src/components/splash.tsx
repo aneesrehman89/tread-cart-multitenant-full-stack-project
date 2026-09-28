@@ -11,14 +11,7 @@ export interface Slide {
   art: 'tire' | 'wheel' | 'fitment';
 }
 
-/**
- * Splash carousel.
- *
- * Auto-advances, but stops the moment someone interacts — an auto-rotating
- * carousel that keeps moving under a reader's cursor is the classic
- * complaint. Also pauses when the tab is hidden and when the viewer prefers
- * reduced motion, and supports arrow keys and swipe.
- */
+// Auto-advances until user interaction; pauses when hidden or under reduced motion.
 export function SplashSlider({
   slides,
   onDone,

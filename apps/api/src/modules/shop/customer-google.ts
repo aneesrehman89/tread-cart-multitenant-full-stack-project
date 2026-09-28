@@ -10,14 +10,7 @@ import { badRequest, unprocessable } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { mailConfigured } from '../../lib/mailer.js';
 
-/**
- * "Continue with Google" for shoppers.
- *
- * Mounted at /v1/customer, outside the tenant middleware, because Google
- * redirects the browser straight back to the API with no tenant header. The
- * store is carried through the signed `state` parameter instead — that is
- * also what stops the callback being replayable against a different store.
- */
+// Customer Google sign-in; the store travels in signed state since Google sends no tenant header.
 export const customerGoogleRouter: Router = Router();
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -65,8 +58,7 @@ function verifyState(state: string): StatePayload | null {
 }
 
 customerGoogleRouter.get('/auth/providers', (_req, res) => {
-  // Also reports whether receipts can be emailed, so the storefront does not
-  // claim to have sent one when no provider is configured.
+  // Also reports whether receipts can be emailed.
   res.json({ google: configured(), email: mailConfigured() });
 });
 
@@ -165,8 +157,7 @@ customerGoogleRouter.get(
     const db = await getTenantClient(tenant.id, tenant.databaseUrl);
     const email = profile.email.toLowerCase();
 
-    // Claims an existing row if this address already shopped here as a guest,
-    // so their order history carries over rather than forking.
+    // Claim an existing guest row so order history carries over.
     const existing = await db.customer.findUnique({ where: { email } });
     const customer = existing
       ? await db.customer.update({
@@ -199,8 +190,7 @@ customerGoogleRouter.get(
 
     logger.info({ email, tenant: tenant.slug }, 'customer signed in with Google');
 
-    // Handed over once in the URL, then swapped for an httpOnly cookie by the
-    // storefront's own callback route.
+    // One-time token, swapped for an httpOnly cookie by the storefront.
     return back(
       `/auth/google?token=${encodeURIComponent(token)}&next=${encodeURIComponent(parsed.next)}`,
     );

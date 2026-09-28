@@ -46,8 +46,7 @@ sellerDashboardRouter.get(
       db.order.count({ where: { createdAt: { gte: since } } }),
       db.order.count({ where: { createdAt: { gte: prevSince, lt: since } } }),
       db.order.count({ where: { status: { in: ['PAID', 'FULFILLING'] } } }),
-      // Prisma cannot compare two columns in a where clause, so the
-      // onHand <= reorderAt test is applied after fetching the low candidates.
+      // Prisma can't compare two columns, so onHand <= reorderAt is filtered in JS.
       db.inventoryItem.findMany({
         where: { onHand: { lte: 25 } },
         include: { sku: { include: { product: true } } },

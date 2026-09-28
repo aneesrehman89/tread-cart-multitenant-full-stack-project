@@ -63,8 +63,7 @@ export default function ApplicationStatusPage({ params }: { params: Promise<{ id
   async function check() {
     setChecking(true);
     reload();
-    // Hold the spinner briefly so a same-status result still reads as an
-    // action that happened, rather than a button that did nothing.
+    // Brief spinner so a same-status result still feels like an action.
     await new Promise((r) => setTimeout(r, 600));
     setChecking(false);
     setCheckedAt(new Date());

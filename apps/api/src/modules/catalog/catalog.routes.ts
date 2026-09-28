@@ -24,11 +24,7 @@ const listQuery = z.object({
   perPage: z.coerce.number().int().min(1).max(100).default(24),
 });
 
-/**
- * Storefront product listing. Read-through cached per tenant; the cache key
- * includes every filter plus the customer group, because group pricing changes
- * the response body.
- */
+// Cached per tenant; the key includes filters and customer group.
 catalogRouter.get(
   '/products',
   asyncHandler(async (req, res) => {
@@ -80,8 +76,7 @@ catalogRouter.get(
       return { items, total, page: q.page, perPage: q.perPage };
     });
 
-    // Group pricing is resolved outside the cached block so one cached product
-    // list can serve every customer group.
+    // Pricing resolved outside the cache so one list serves every group.
     const groupId = q.groupId ?? null;
     const skuLines = payload.items.flatMap((p) =>
       p.skus.map((s) => ({ skuId: s.id, quantity: 1 })),
@@ -143,11 +138,7 @@ const stockSchema = z.object({
   reorderAt: z.number().int().min(0).optional(),
 });
 
-/**
- * Inventory adjustment, written through the cache: Postgres is the source of
- * truth, and the refreshed row is pushed straight back into Redis so the next
- * storefront read is already warm and correct.
- */
+// Write-through: Postgres first, then refresh Redis.
 catalogRouter.put(
   '/skus/:skuId/stock',
   requireAuth,

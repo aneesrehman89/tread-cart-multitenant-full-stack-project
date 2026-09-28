@@ -5,13 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ErrorNote, Loading } from '@/components/ui';
 
-/**
- * Landing page for the customer Google callback.
- *
- * The API hands over a one-time token in the URL; this swaps it for an
- * httpOnly cookie on this app's origin, then replaces the history entry so
- * the token is not left in the back button.
- */
+// Swaps the one-time callback token for a cookie and removes it from history.
 export default function GoogleCallbackPage() {
   return (
     <Suspense fallback={<Loading label="Finishing sign-in" />}>

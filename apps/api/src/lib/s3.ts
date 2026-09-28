@@ -2,10 +2,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config/env.js';
 
-/**
- * One S3 client for the process. Locally this points at MinIO; in staging and
- * production leave S3_ENDPOINT unset and it talks to real Amazon S3.
- */
+// Unset S3_ENDPOINT in real environments to use AWS S3.
 export const s3 = new S3Client({
   region: env.S3_REGION,
   ...(env.S3_ENDPOINT ? { endpoint: env.S3_ENDPOINT } : {}),
@@ -16,10 +13,7 @@ export const s3 = new S3Client({
   },
 });
 
-/**
- * Object keys are namespaced by tenant so a signed URL for one tenant can
- * never be pointed at another tenant's media by editing the path.
- */
+// Keys are tenant-namespaced so signed URLs can't cross tenants.
 export function tenantObjectKey(tenantSlug: string, ...parts: string[]): string {
   return ['tenants', tenantSlug, ...parts].join('/');
 }

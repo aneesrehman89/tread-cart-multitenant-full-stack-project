@@ -1,10 +1,4 @@
-/**
- * Provisions a new tenant: creates its own Postgres database, pushes the
- * tenant schema into it, and registers it in the control plane.
- *
- *   pnpm --filter @treadcart/api tenant:provision -- \
- *     --slug wheelworks --name "WheelWorks" --host wheelworks.localhost
- */
+// Creates a tenant DB, pushes the schema, registers it. Usage: pnpm --filter @treadcart/api tenant:provision -- --slug <slug> --name <name> --host <host>
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve, dirname } from 'node:path';
@@ -48,8 +42,7 @@ export async function provisionTenant(opts: {
   const databaseName = `treadcart_t_${slug.replace(/-/g, '_')}`;
   const databaseUrl = tenantDatabaseUrl(databaseName);
 
-  // CREATE DATABASE cannot run inside a transaction, so it goes through a
-  // throwaway client pointed at the server's maintenance database.
+  // CREATE DATABASE can't run in a transaction, so use a throwaway client.
   const admin = new ControlPrismaClient({
     datasources: { db: { url: env.TENANT_DB_ADMIN_URL } },
   });
@@ -68,15 +61,7 @@ export async function provisionTenant(opts: {
     await admin.$disconnect();
   }
 
-  // Apply the tenant schema to the brand-new database.
-  //
-  // `db push` is right for a skeleton; before production switch this to
-  // `prisma migrate deploy` so every tenant DB advances through the same
-  // reviewed migration history and schemaVersion below means something.
-  // Awaited, not execFileSync: this runs inside an HTTP request when a
-  // platform admin approves a seller, and a synchronous spawn would block the
-  // whole Node event loop for the ~10s the push takes, freezing every other
-  // request the API is serving.
+  // db push for now (switch to migrate deploy for production); async so it doesn't block the event loop.
   await execFileAsync(
     process.execPath,
     [

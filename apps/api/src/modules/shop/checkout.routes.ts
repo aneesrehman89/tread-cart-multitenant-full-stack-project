@@ -15,12 +15,7 @@ import type { PrismaClient as TenantPrismaClient } from '../../generated/tenant/
 
 export const checkoutRouter: Router = Router();
 
-/**
- * A real Stripe secret key is `sk_test_` or `sk_live_` followed by a long
- * random string. The length check matters: the placeholder in .env.example is
- * `sk_test_xxx`, which passes a naive prefix test and then fails at the API
- * with an authentication error mid-checkout.
- */
+// Length check rejects the sk_test_xxx placeholder from .env.example.
 export function stripeConfigured(): boolean {
   const key = env.STRIPE_SECRET_KEY;
   return /^sk_(test|live)_/.test(key) && key.length >= 30;
@@ -39,13 +34,7 @@ const lineSchema = z.object({
   quantity: z.number().int().min(1).max(99),
 });
 
-/**
- * Prices a cart on the server.
- *
- * The browser sends SKU ids and quantities only. Prices, discounts, tax and
- * shipping are all resolved here against the customer's pricing group, so a
- * cart edited in devtools cannot change what anything costs.
- */
+// Server-side pricing: the client sends only SKU ids and quantities.
 async function priceCart(
   db: TenantPrismaClient,
   tenantSlug: string,
@@ -63,8 +52,7 @@ async function priceCart(
     throw unprocessable('Some items are no longer available', { skuIds: missing.map((m) => m.skuId) });
   }
 
-  // Stock is checked before payment, not after: taking money for something
-  // that cannot ship is far worse than rejecting the checkout.
+  // Check stock before taking payment.
   const shortfalls = lines
     .map((l) => ({ line: l, sku: bySku.get(l.skuId)! }))
     .filter(({ line, sku }) => (sku.inventory?.onHand ?? 0) < line.quantity)
@@ -118,11 +106,6 @@ async function priceCart(
   };
 }
 
-/**
- * Live cart pricing. Called on every cart render so a guest sees list prices
- * and a signed-in trade customer sees their own, without the browser ever
- * computing a total.
- */
 checkoutRouter.post(
   '/quote',
   asyncHandler(async (req, res) => {
@@ -162,13 +145,7 @@ const placeSchema = z.object({
     .optional(),
 });
 
-/**
- * Creates the order and hands back a Stripe Checkout URL.
- *
- * The order is written first, in AWAITING_PAYMENT, so there is always a record
- * to reconcile a webhook against. Stock is reserved at the same time and only
- * decremented for real once payment confirms.
- */
+// Order is created AWAITING_PAYMENT with stock reserved; stock is decremented once payment confirms.
 checkoutRouter.post(
   '/place',
   requireCustomer,
@@ -196,8 +173,7 @@ checkoutRouter.post(
 
     const number = `TC-${Date.now().toString().slice(-8)}`;
 
-    // The order and its stock reservation are one unit: an order must never
-    // exist without the stock behind it being held.
+    // Order and stock reservation are one transaction.
     const order = await db.$transaction(async (tx) => {
       const created = await tx.order.create({
         data: {
@@ -236,8 +212,6 @@ checkoutRouter.post(
     });
 
     if (!stripe) {
-      // Without keys there is no way to take payment. Say so plainly rather
-      // than pretending the order is paid.
       res.status(200).json({
         order: { id: order.id, number: order.number, totalCents: order.totalCents },
         paymentUrl: null,
@@ -249,9 +223,7 @@ checkoutRouter.post(
       return;
     }
 
-    // The order and its reservation are already committed at this point, so a
-    // failure here must release them. Without this, a Stripe outage would
-    // silently hold stock against orders that can never be paid.
+    // Release the reservation if Stripe fails, or stock stays locked.
     let session: Stripe.Checkout.Session;
     try {
       session = await stripe.checkout.sessions.create({
@@ -315,13 +287,7 @@ checkoutRouter.post(
   }),
 );
 
-/**
- * Development-only: marks an order paid without Stripe.
- *
- * This exists so the checkout flow can be demonstrated before Stripe keys are
- * configured. It refuses to run in production, and refuses at all once Stripe
- * IS configured, so it can never become a way to skip payment.
- */
+// Dev-only payment simulation; disabled in production and once Stripe is configured.
 checkoutRouter.post(
   '/orders/:id/simulate-payment',
   requireCustomer,
@@ -344,10 +310,6 @@ checkoutRouter.post(
   }),
 );
 
-/**
- * Releases an unpaid order's stock reservation and cancels it. Used when
- * payment can never start, and mirrored by the webhook's expiry handling.
- */
 export async function releaseOrder(
   db: TenantPrismaClient,
   orderId: string,
@@ -371,10 +333,7 @@ export async function releaseOrder(
   });
 }
 
-/**
- * Turns a reservation into a real stock decrement and marks the order paid.
- * Shared by the Stripe webhook and the dev simulation so both behave the same.
- */
+// Shared by the webhook and dev simulation.
 export async function markOrderPaid(
   db: TenantPrismaClient,
   orderId: string,
@@ -411,8 +370,7 @@ export async function markOrderPaid(
     });
   });
 
-  // Sent after the transaction commits, and only on the transition — a
-  // repeated webhook must not email the customer twice.
+  // Send after commit, and only on the transition, so retries don't email twice.
   if (justPaid && tenantSlug) {
     await sendOrderConfirmation(db, orderId, tenantSlug).catch((err: unknown) =>
       logger.error({ err, orderId }, 'order confirmation email failed'),

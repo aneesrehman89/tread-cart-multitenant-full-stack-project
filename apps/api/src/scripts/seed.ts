@@ -1,12 +1,4 @@
-/**
- * Seeds a working local environment:
- *   - control plane schema + a platform admin
- *   - two tenants, each with its own database
- *   - staff users, brands, tire & wheel SKUs, inventory,
- *     customer groups with SKU-level pricing, and vehicle fitments
- *
- *   pnpm seed
- */
+// Seeds the control plane, platform admin, demo tenants and their catalogs. Run: pnpm seed
 import { hash as hashPassword } from '@node-rs/argon2';
 import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js';
 import { controlDb } from '../db/control.js';
@@ -16,14 +8,7 @@ import { TIRES, WHEELS, VEHICLES, TIRE_IMAGES, WHEEL_IMAGES, slugify } from './c
 
 const DEMO_PASSWORD = 'Treadcart!2345';
 
-/**
- * Seeds one store's catalog.
- *
- * Every store gets the full range - tires and wheels - because a tire shop
- * that stocks no wheels is not a useful demo of fitment or filtering. Stock
- * levels are deliberately mixed so the in-stock, low and out-of-stock filters
- * all have rows to show.
- */
+// Every store gets tires and wheels, with mixed stock so all stock filters have rows.
 async function seedTenantData(databaseUrl: string): Promise<void> {
   const db = new TenantPrismaClient({ datasources: { db: { url: databaseUrl } } });
 
@@ -193,8 +178,6 @@ async function seedTenantData(databaseUrl: string): Promise<void> {
       });
     }
 
-    // SKU-level pricing on a handful of lines, so the pricing screens have
-    // both fixed-price and percentage overrides to show.
     for (const [i, skuId] of skuIds.slice(0, 6).entries()) {
       const sku = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
       await db.customerGroupPrice.upsert({
@@ -237,10 +220,7 @@ async function seedTenantData(databaseUrl: string): Promise<void> {
 
     await db.customer.deleteMany({ where: { email: { notIn: customers.map((c) => c.email) } } });
 
-    // Order history is cleared before the catalog is tidied, so stray
-    // products are genuinely unreferenced and can be deleted rather than
-    // merely hidden. Seeding the new orders afterwards also stops them
-    // picking a stray SKU and pinning it all over again.
+    // Clear orders first so unreferenced products can be deleted.
     await db.orderItem.deleteMany();
     await db.orderEvent.deleteMany();
     await db.order.deleteMany();
@@ -254,8 +234,7 @@ async function seedTenantData(databaseUrl: string): Promise<void> {
       include: { skus: { include: { orderItems: { take: 1 } } } },
     });
     for (const stray of strays) {
-      // A product still on an order is hidden, never deleted: order history
-      // references its SKUs and must stay readable.
+      // Products on orders are hidden, never deleted.
       const referenced = stray.skus.some((sk) => sk.orderItems.length > 0);
       if (referenced) {
         await db.product.update({ where: { id: stray.id }, data: { isActive: false } });
@@ -277,11 +256,7 @@ async function seedTenantData(databaseUrl: string): Promise<void> {
 /** How many orders each store gets. Small enough that the lists stay readable. */
 const ORDERS_PER_TENANT = 10;
 
-/**
- * Spreads a handful of orders over the last 60 days, weighted towards the
- * recent half so the dashboard's month-over-month deltas are positive and the
- * trend line has shape.
- */
+// Orders over 60 days, weighted recent so dashboard trends show growth.
 async function seedOrders(
   db: TenantPrismaClient,
   customers: { id: string; email: string }[],
@@ -348,8 +323,7 @@ async function seedPlatformOps(adminId: string): Promise<void> {
   );
   const HOUR = 60 * 60 * 1000;
 
-  // Demo content is rebuilt each run so edits to the fixtures below take
-  // effect. Anything a reviewer typed into the console is thrown away with it.
+  // Demo content is rebuilt on every run.
   await controlDb.ticketMessage.deleteMany();
   await controlDb.supportTicket.deleteMany();
   await controlDb.platformBanner.deleteMany();
@@ -366,7 +340,7 @@ async function seedPlatformOps(adminId: string): Promise<void> {
       slaHours: 2,
       messages: [
         { fromStaff: false, author: 'Ayesha Siddiqui', body: 'I was told my refund would be processed in 5 days and I still have not received it.' },
-        { fromStaff: true, author: 'Ahmed Raza', body: 'Sorry for the delay — I can see the refund was approved on the store side. Escalating to payments now.' },
+        { fromStaff: true, author: 'Anees Ur Rehman', body: 'Sorry for the delay — I can see the refund was approved on the store side. Escalating to payments now.' },
       ],
     },
     {
@@ -393,7 +367,7 @@ async function seedPlatformOps(adminId: string): Promise<void> {
       slaHours: 18,
       messages: [
         { fromStaff: false, author: 'Fatima Khan', body: 'I ordered 225/45R17 and received 235/40R18.' },
-        { fromStaff: true, author: 'Ahmed Raza', body: 'Apologies — arranging a pickup and a replacement at no charge.' },
+        { fromStaff: true, author: 'Anees Ur Rehman', body: 'Apologies — arranging a pickup and a replacement at no charge.' },
       ],
     },
     {
@@ -481,23 +455,20 @@ async function seedPlatformOps(adminId: string): Promise<void> {
 async function main(): Promise<void> {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
-  // The platform console operator. tenantId stays null: a platform admin is
-  // deliberately not scoped to any one store.
-  // Not an upsert: Postgres treats NULLs as distinct in a unique index, so
-  // the (tenantId, email) key cannot match a row whose tenantId is null.
+  // tenantId is null, and NULLs never match a unique index, so this can't be an upsert.
   const existingAdmin = await controlDb.staffUser.findFirst({
     where: { email: 'admin@treadcart.test', tenantId: null },
   });
   const platformAdmin = existingAdmin
     ? await controlDb.staffUser.update({
         where: { id: existingAdmin.id },
-        data: { passwordHash, role: 'PLATFORM_ADMIN', name: 'Ahmed Raza' },
+        data: { passwordHash, role: 'PLATFORM_ADMIN', name: 'Anees Ur Rehman' },
       })
     : await controlDb.staffUser.create({
         data: {
           email: 'admin@treadcart.test',
           passwordHash,
-          name: 'Ahmed Raza',
+          name: 'Anees Ur Rehman',
           role: 'PLATFORM_ADMIN',
           tenantId: null,
         },

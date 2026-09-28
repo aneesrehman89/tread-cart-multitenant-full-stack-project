@@ -2,14 +2,7 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-/**
- * Starts the OAuth flow by leaving the SPA entirely: the API owns the client
- * secret and issues the redirect to Google.
- *
- * This deliberately points at the API directly rather than at this app's JSON
- * proxy — the proxy would follow the 302 server-side and hand back Google's
- * sign-in HTML as a JSON body instead of navigating the browser.
- */
+// Navigates to the API directly; the JSON proxy would swallow the 302 to Google.
 export function GoogleButton({ label = 'Continue with Google' }: { label?: string }) {
   return (
     <a

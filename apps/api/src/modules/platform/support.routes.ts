@@ -41,8 +41,7 @@ supportRouter.get(
       take: 100,
     });
 
-    // Counts are for the whole queue, not the filtered view, so the header
-    // does not change every time someone types in the search box.
+    // Counts cover the whole queue, not the filtered view.
     const [queueCount, unassignedCount] = await Promise.all([
       controlDb.supportTicket.count({ where: { status: { notIn: ['CLOSED', 'RESOLVED'] } } }),
       controlDb.supportTicket.count({
@@ -85,8 +84,7 @@ supportRouter.post(
     const tenant = await controlDb.tenant.findUnique({ where: { slug: body.tenantSlug } });
     if (!tenant) throw notFound(`No store with slug "${body.tenantSlug}"`);
 
-    // Continue from the highest number already issued, so new tickets sort
-    // after the existing ones instead of restarting from the base.
+    // Continue numbering from the highest existing ticket.
     const latest = await controlDb.supportTicket.findFirst({
       orderBy: { number: 'desc' },
       select: { number: true },
@@ -174,8 +172,7 @@ supportRouter.patch(
   asyncHandler(async (req, res) => {
     const body = patchSchema.parse(req.body);
 
-    // Only platform staff can own a ticket; a store user must not be assigned
-    // one, since the queue spans every store.
+    // Only platform staff can own tickets.
     if (body.assigneeId) {
       const assignee = await controlDb.staffUser.findFirst({
         where: { id: body.assigneeId, role: 'PLATFORM_ADMIN', isActive: true },

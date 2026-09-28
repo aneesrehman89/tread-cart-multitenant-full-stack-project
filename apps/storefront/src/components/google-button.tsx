@@ -4,18 +4,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 const STORE = process.env.NEXT_PUBLIC_STORE ?? 'apexauto';
 
-/**
- * Starts the OAuth flow by leaving the SPA entirely: the API owns the client
- * secret and issues the redirect to Google.
- *
- * Points at the API directly rather than at this app's JSON proxy — the proxy
- * would follow the 302 server-side and hand back Google's sign-in HTML as a
- * JSON body instead of navigating the browser.
- *
- * The store travels in the query string because Google will redirect straight
- * back to the API, where no tenant header exists; the API signs it into the
- * OAuth state so it cannot be tampered with in transit.
- */
+// Navigates to the API directly (the proxy would swallow the 302); the store is signed into OAuth state.
 export function GoogleButton({
   label = 'Continue with Google',
   next = '/account',

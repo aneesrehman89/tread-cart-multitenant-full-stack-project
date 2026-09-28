@@ -442,14 +442,7 @@ function StockCell({ sku, onSaved }: { sku: Sku; onSaved: () => void }) {
   );
 }
 
-/**
- * Add product.
- *
- * Only what a SKU genuinely needs: size, price, stock and a code. The size
- * is typed the way it is written on the sidewall and parsed into the
- * structured columns behind it, rather than asking for section width,
- * aspect ratio and rim diameter as three separate numbers.
- */
+// Add product: one size field is parsed into the structured size columns.
 function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState({
     name: '',
@@ -615,8 +608,7 @@ function NewProductDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
             )}
           </div>
 
-          {/* Reads back what the size was understood to mean, so a typo is
-              caught before it becomes a mis-filtered listing. */}
+          {/* Show the parsed size so typos are caught before saving. */}
           {form.type !== 'ACCESSORY' && form.size.trim() && (
             <p
               className={`-mt-1 text-2xs ${sizeInvalid ? 'text-red-600' : 'text-brand-600'}`}

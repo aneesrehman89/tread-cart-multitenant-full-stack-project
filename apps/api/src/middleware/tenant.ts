@@ -13,14 +13,7 @@ interface CachedTenant extends ResolvedTenant {
   status: string;
 }
 
-/**
- * Works out which tenant a request belongs to, in priority order:
- *   1. X-Tenant-Slug header  (server-to-server, local dev, tests)
- *   2. Host header           (custom domains and subdomains in production)
- *
- * In production you should trust only the Host header; the header override is
- * gated on a non-production NODE_ENV or an authenticated platform admin.
- */
+// X-Tenant-Slug wins; otherwise the Host header identifies the store.
 function readTenantHint(req: Request): { kind: 'slug' | 'host'; value: string } | null {
   const slug = req.header('x-tenant-slug');
   if (slug) return { kind: 'slug', value: slug.trim().toLowerCase() };
@@ -107,8 +100,7 @@ export async function resolveTenant(
     };
     req.db = await getTenantClient(tenant.id, tenant.databaseUrl);
 
-    // Hold the client open for the life of the request so the LRU and the
-    // idle sweeper cannot disconnect it mid-query.
+    // Keep the client acquired for the whole request so it can't be evicted mid-query.
     acquire(tenant.id);
     let released = false;
     const done = () => {

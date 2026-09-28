@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -19,9 +19,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="font-sans">
-        {/* Store identity, shopper session and cart all live above the
-            router, so navigating between screens refetches none of them. */}
+      <body className="font-sans" suppressHydrationWarning>
+        {/* Store, session and cart live above the router so navigation doesn't refetch them. */}
         <StoreProvider>
           <CartProvider>{children}</CartProvider>
         </StoreProvider>

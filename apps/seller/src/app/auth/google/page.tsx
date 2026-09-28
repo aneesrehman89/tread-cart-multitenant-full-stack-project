@@ -5,13 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ErrorNote, Loading } from '@/components/ui';
 
-/**
- * Landing page for the Google callback.
- *
- * The API hands over a one-time token in the URL; this swaps it for an
- * httpOnly cookie on this app's origin through the proxy, so the token never
- * lingers anywhere the browser can read it.
- */
+// Swaps the one-time callback token for an httpOnly cookie.
 export default function GoogleCallbackPage() {
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);

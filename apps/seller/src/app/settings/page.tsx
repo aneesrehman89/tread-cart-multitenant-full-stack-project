@@ -67,8 +67,7 @@ export default function SettingsPage() {
     });
   }, [data]);
 
-  // Paint the dashboard itself as the draft changes, so what you are editing
-  // is what you are looking at. Reverted on unmount if never saved.
+  // Live-preview the draft theme; reverted on unmount if unsaved.
   useEffect(() => {
     if (draft) applyStoreTheme(draft);
   }, [draft]);

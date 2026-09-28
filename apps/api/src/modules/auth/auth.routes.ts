@@ -28,9 +28,7 @@ authRouter.post(
       where: { email: email.toLowerCase(), tenantId: tenant.id, isActive: true },
     });
 
-    // Same response whether the address is unknown or the password is wrong,
-    // so this endpoint cannot be used to enumerate accounts.
-    // A Google-only account has no local hash and cannot sign in this way.
+    // Same error for unknown email and wrong password, to prevent enumeration.
     const ok = user?.passwordHash ? await verifyPassword(user.passwordHash, password) : false;
     if (!user || !ok) throw unauthorized('Invalid email or password');
 

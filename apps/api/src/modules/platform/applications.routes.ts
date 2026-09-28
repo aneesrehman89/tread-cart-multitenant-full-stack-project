@@ -7,10 +7,7 @@ import { provisionTenant } from '../../scripts/provision-tenant.js';
 import { invalidatePrefix } from '../../cache/cache.js';
 import { logger } from '../../lib/logger.js';
 
-/**
- * Seller application review. Approving is the only path that creates a store:
- * it provisions the tenant database and turns the applicant into its owner.
- */
+// Approval is the only path that creates a store.
 export const applicationsRouter: Router = Router();
 
 const listQuery = z.object({
@@ -75,10 +72,7 @@ applicationsRouter.post(
   }),
 );
 
-/**
- * Approve: provision the store database, apply the tenant schema, and create
- * the applicant as its owner using the password they chose at signup.
- */
+// Provision the DB, push the schema, create the applicant as owner.
 applicationsRouter.post(
   '/:id/approve',
   asyncHandler(async (req, res) => {
@@ -94,11 +88,7 @@ applicationsRouter.post(
       throw badRequest('This application has no store page details');
     }
 
-    // Approval spans three writes that are not in one transaction: the
-    // database cannot be created inside one, and the schema push is a separate
-    // process. A retry after a partial failure must therefore be able to pick
-    // up where it left off, so an existing tenant is only a conflict when some
-    // *other* application already owns it.
+    // Not transactional (CREATE DATABASE can't be), so retries must resume after partial failure.
     const existingTenant = await controlDb.tenant.findUnique({
       where: { slug: application.storeSlug },
     });
@@ -109,8 +99,7 @@ applicationsRouter.post(
       if (owner) throw conflict(`A store already exists at "${application.storeSlug}"`);
     }
 
-    // provisionTenant upserts, so re-running it against a half-created store
-    // is safe and simply re-applies the schema.
+    // provisionTenant upserts, so re-running is safe.
     const { id: tenantId } = await provisionTenant({
       slug: application.storeSlug,
       name: application.storeName,
@@ -119,8 +108,7 @@ applicationsRouter.post(
       brandAccent: application.brandAccent,
     });
 
-    // The applicant becomes the store owner, reusing the password hash from
-    // signup so they can sign in immediately with what they already chose.
+    // Reuse the signup password hash so the owner can sign in immediately.
     const existingOwner = await controlDb.staffUser.findFirst({
       where: { tenantId, email: application.email },
     });

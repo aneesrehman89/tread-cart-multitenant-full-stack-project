@@ -1,16 +1,7 @@
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
 
-/**
- * Outbound SMS via Twilio.
- *
- * Uses the REST API over plain fetch rather than the SDK — one HTTP call does
- * not justify the dependency.
- *
- * With no credentials the code is logged and `delivered` comes back false, so
- * callers can keep showing the code on screen in development instead of
- * claiming a text was sent.
- */
+// Twilio via plain fetch; returns delivered=false when unconfigured.
 
 export interface SmsResult {
   delivered: boolean;
@@ -45,8 +36,7 @@ export async function sendSms(to: string, body: string): Promise<SmsResult> {
 
     if (!res.ok) {
       const detail = await res.text();
-      // Twilio's most common rejection on a trial account is "unverified
-      // recipient", which is a configuration problem rather than a bug.
+      // Trial accounts reject unverified recipients; that's config, not a bug.
       throw new Error(`Twilio responded ${res.status}: ${detail.slice(0, 250)}`);
     }
 

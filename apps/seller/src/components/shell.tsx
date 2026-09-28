@@ -9,10 +9,7 @@ import { Avatar, Pill, titleCase } from './ui';
 
 export type { SellerMe };
 
-/**
- * Nav entries carry the permission that gates their screen, so a catalog
- * editor never sees an Orders link that would 403 when clicked.
- */
+// Nav items carry their required permission.
 const NAV = [
   { href: '/', label: 'Dashboard', icon: IconGrid, permission: 'order:read' },
   { href: '/products', label: 'Products', icon: IconTag, permission: 'catalog:read' },
@@ -131,19 +128,13 @@ export function Shell({ children, breadcrumb }: { children: ReactNode; breadcrum
   );
 }
 
-/**
- * Bounces to /login when there is no live session.
- *
- * Reads the shared session rather than issuing its own auth/me — that extra
- * request was serialised in front of every screen's own data fetch.
- */
+// Redirects to /login when there's no session, using the shared session.
 export function useRequireSeller(): boolean {
   const router = useRouter();
   const { me, loading, isPublic } = useSession();
 
   useEffect(() => {
-    // Only once the shared session has actually resolved, and never on a
-    // public route — redirecting mid-load caused a reload loop.
+    // Redirect only after the session resolves and never on public routes (avoids a reload loop).
     if (!isPublic && !loading && !me) router.replace('/login');
   }, [loading, me, isPublic, router]);
 

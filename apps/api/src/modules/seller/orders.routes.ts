@@ -66,11 +66,7 @@ sellerOrdersRouter.get(
   }),
 );
 
-/**
- * Fulfilment moves an order forward one documented step at a time. An
- * arbitrary jump (delivered straight from paid, or reviving a cancelled
- * order) is rejected rather than silently accepted.
- */
+// Orders move one allowed step at a time; invalid jumps are rejected.
 const ALLOWED_TRANSITIONS: Record<string, OrderStatus[]> = {
   PAID: ['FULFILLING', 'CANCELLED', 'REFUNDED'],
   FULFILLING: ['SHIPPED', 'CANCELLED'],
@@ -106,8 +102,7 @@ sellerOrdersRouter.post(
       );
     }
 
-    // The status change and its audit event are one unit: an order must never
-    // move without a matching entry in its history.
+    // Status change and audit event are written together.
     const [updated] = await db.$transaction([
       db.order.update({
         where: { id: order.id },

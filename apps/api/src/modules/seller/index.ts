@@ -16,13 +16,7 @@ import { sellerOrdersRouter } from './orders.routes.js';
 import { sellerCustomersRouter } from './customers.routes.js';
 import { sellerStaffRouter } from './staff.routes.js';
 
-/**
- * The seller dashboard API.
- *
- * Mounted before the tenant middleware, because the tenant is taken from the
- * signed-in staff record rather than a request header — see
- * middleware/seller-tenant.ts for why that distinction matters.
- */
+// Mounted before tenant middleware; tenant comes from the session (see seller-tenant.ts).
 export const sellerRouter: Router = Router();
 
 // Public: signing up and signing in both happen without a session.
@@ -85,8 +79,7 @@ sellerRouter.get(
         cardStyles: CARD_STYLES,
       },
       domains: record.domains,
-      // Shown read-only: a seller should see where their data lives, but
-      // renaming a database is a platform operation.
+      // Read-only: renaming a database is a platform operation.
       databaseName: record.databaseName,
       createdAt: record.createdAt,
     });
@@ -107,11 +100,9 @@ sellerRouter.patch(
 
     const updated = await controlDb.tenant.update({ where: { id: tenant.id }, data: body });
 
-    // The storefront resolves tenants through a cached lookup, so a rename or
-    // a colour change has to clear it to show up straight away.
+    // Clear the tenant lookup cache so changes show immediately.
     await invalidateTenantLookup(existing.slug, existing.domains.map((d) => d.host));
-    // The storefront caches its home payload per tenant; a rename or a theme
-    // change has to drop it or the shop keeps the old look for the full TTL.
+    // Drop the cached home payload so theme changes show immediately.
     await invalidatePrefix(tenantKey(existing.slug, 'shop'));
 
     res.json(updated);

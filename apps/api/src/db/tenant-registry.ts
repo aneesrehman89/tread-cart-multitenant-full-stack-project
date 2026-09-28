@@ -2,20 +2,7 @@ import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 
-/**
- * Per-tenant connection registry.
- *
- * Every tenant has its own Postgres database, so every tenant needs its own
- * PrismaClient (a client is bound to one connection string for its lifetime).
- * Creating one per request would open a fresh pool per request, so clients are
- * kept warm here and shared across requests for the same tenant.
- *
- * Two bounds keep this from exhausting Postgres:
- *   - TENANT_POOL_MAX_CLIENTS caps how many tenants are warm at once (LRU).
- *   - each client opens at most `connection_limit` connections (set below).
- * Worst case is MAX_CLIENTS * connection_limit sockets from this process, so
- * size those two against the server's max_connections before scaling up.
- */
+// LRU of per-tenant Prisma clients. Worst-case sockets = TENANT_POOL_MAX_CLIENTS * connection_limit.
 
 interface Entry {
   client: TenantPrismaClient;
@@ -53,8 +40,7 @@ async function evictLeastRecentlyUsed(): Promise<void> {
   }
 
   if (oldestKey === null) {
-    // Every warm client is busy. Let this request through rather than
-    // rejecting it; the registry will settle once the burst passes.
+    // All clients busy: allow the request rather than reject it.
     logger.warn({ size: registry.size }, 'tenant registry over capacity, all clients busy');
     return;
   }

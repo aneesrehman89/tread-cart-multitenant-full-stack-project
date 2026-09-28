@@ -14,11 +14,7 @@ export const tenantsRouter: Router = Router();
 
 const PLATFORM_CACHE_PREFIX = 'platform:';
 
-/**
- * Store list. Each row needs order counts and revenue that live in the
- * tenant's own database, so this is a fan-out; the assembled result is cached
- * because the dashboard and this list are the two hottest platform screens.
- */
+// Fan-out for per-store counts and revenue, cached.
 tenantsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
@@ -181,8 +177,7 @@ tenantsRouter.patch(
 
     const tenant = await controlDb.tenant.update({ where: { slug }, data: body });
 
-    // The tenant lookup is cached on the request path, so a suspension has to
-    // clear it or the store stays reachable until the TTL expires.
+    // Clear the cached tenant lookup so suspension applies immediately.
     await invalidateTenantLookup(slug, existing.domains.map((d) => d.host));
     await invalidatePrefix(PLATFORM_CACHE_PREFIX);
 

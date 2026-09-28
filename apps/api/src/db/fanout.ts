@@ -3,14 +3,7 @@ import { controlDb } from './control.js';
 import { getTenantClient, acquire, release } from './tenant-registry.js';
 import { logger } from '../lib/logger.js';
 
-/**
- * Runs a query against every active tenant database and collects the results.
- *
- * This is the cost of database-per-tenant: anything the platform admin needs
- * across stores is N queries instead of one GROUP BY. It is fine for the
- * hundreds of tenants this is sized for, and the results are cached upstream.
- * Past that, these numbers belong in a rollup table the tenants write to.
- */
+// Runs a query on every active tenant DB. Fine at hundreds of tenants; beyond that use a rollup table.
 export interface FanoutResult<T> {
   tenantId: string;
   slug: string;
@@ -32,8 +25,7 @@ export async function fanout<T>(
   const concurrency = opts.concurrency ?? 8;
   const results: FanoutResult<T>[] = [];
 
-  // Bounded concurrency: one warm client per tenant is held for the duration,
-  // so an unbounded fan-out would blow through the registry's LRU cap.
+  // Bounded concurrency so the fan-out stays within the registry's LRU cap.
   for (let i = 0; i < tenants.length; i += concurrency) {
     const batch = tenants.slice(i, i + concurrency);
     const settled = await Promise.all(

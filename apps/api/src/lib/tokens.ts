@@ -1,13 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
 import { env } from '../config/env.js';
 
-/**
- * Opaque access tokens.
- *
- * The token is pure entropy: it carries no claims, so it cannot be decoded,
- * and revoking it is a single row update. Only the peppered hash is stored, so
- * a database leak yields nothing replayable without the pepper.
- */
+// Opaque random tokens: no claims, revocable with one row update, stored only as a peppered hash.
 
 export function generateOpaqueToken(): string {
   return randomBytes(32).toString('base64url');
@@ -26,13 +20,7 @@ export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
-/**
- * Signed checkout intents.
- *
- * The client is handed a payload plus an HMAC of it. When it comes back we
- * re-sign and compare, so line items and totals cannot be edited in the
- * browser between pricing and payment.
- */
+// HMAC-signed checkout payload so totals can't be edited client-side.
 export interface CheckoutIntentPayload {
   tenantId: string;
   orderId: string;

@@ -47,9 +47,7 @@ export function createApp(): Express {
   // Health checks are deliberately outside tenant resolution and rate limiting.
   app.use(healthRouter);
 
-  // Stripe signs the raw bytes it sent, so this must be mounted BEFORE
-  // express.json() — parsing and re-serialising would break the signature.
-  // It resolves its own tenant from the event metadata, not a header.
+  // Must be mounted before express.json(): Stripe signs the raw body.
   app.post(
     '/v1/webhooks/stripe',
     express.raw({ type: 'application/json' }),
@@ -70,17 +68,13 @@ export function createApp(): Express {
     }),
   );
 
-  // The platform console is cross-tenant, so it mounts BEFORE the tenant
-  // middleware and never resolves a single tenant from the request.
+  // Cross-tenant routes, mounted before tenant resolution.
   app.use('/v1/platform', platformRouter);
 
-  // The seller dashboard takes its tenant from the session, not a header, so
-  // it also mounts before the tenant middleware.
+  // Seller tenant comes from the session, not a header.
   app.use('/v1/seller', sellerRouter);
 
-  // Shopper OAuth. Mounted outside the tenant middleware because Google
-  // redirects back here with no tenant header — the store travels in the
-  // signed state parameter instead.
+  // Google redirects without a tenant header; the store travels in signed state.
   app.use('/v1/customer', customerGoogleRouter);
 
   // Everything below this line runs inside a resolved tenant's database.
@@ -88,12 +82,8 @@ export function createApp(): Express {
   app.use('/v1/auth', authRouter);
   app.use('/v1/catalog', catalogRouter);
 
-  // The public storefront: same tenant resolution, shopper sessions instead
-  // of staff ones.
   app.use('/v1/shop', shopRouter);
 
-  // Echoes the resolved tenant and its brand tokens; the storefront calls this
-  // on boot to theme itself.
   app.get('/v1/context', (req, res) => {
     res.json({ tenant: req.tenant, actor: req.actor ?? null });
   });

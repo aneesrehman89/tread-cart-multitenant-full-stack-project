@@ -18,14 +18,7 @@ import {
 } from '@/components/ui';
 import { GoogleButton } from '@/components/google-button';
 
-/**
- * Checkout: Browse → Cart → **Sign in / register → address → pay** → order.
- *
- * Authentication happens here rather than up front, so a shopper can fill a
- * cart as a guest and only create an account once they have decided to buy.
- * The cart is re-priced after signing in, because group pricing may change
- * what they owe.
- */
+// Guest cart; sign-in happens here, then address and payment. Re-price after sign-in for group pricing.
 const STEPS = ['Account', 'Address', 'Payment'] as const;
 
 export default function CheckoutPage() {

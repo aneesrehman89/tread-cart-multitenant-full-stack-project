@@ -2,10 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { StaffRole } from '../generated/control/index.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 
-/**
- * Permissions are the unit routes check; roles are just named bundles of them.
- * Adding a role means adding a row here, not editing every route.
- */
+// Routes check permissions; roles are just bundles of them.
 export const PERMISSIONS = [
   'catalog:read',
   'catalog:write',

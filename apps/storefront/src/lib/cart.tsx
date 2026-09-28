@@ -11,15 +11,7 @@ import {
 } from 'react';
 import { api } from './api';
 
-/**
- * The cart.
- *
- * Only SKU ids and quantities live in the browser. Every price, discount, tax
- * and total comes back from the server, priced against the shopper's customer
- * group — so editing localStorage changes what you are buying, never what it
- * costs. It also means a guest can fill a cart before having an account,
- * which is what makes "log in at checkout" work.
- */
+// Stores only SKU ids and quantities; all pricing comes from the server.
 
 export interface CartLine {
   skuId: string;
@@ -104,8 +96,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [lines, hydrated]);
 
-  // Re-price whenever the cart changes. The signed-in state can change too
-  // (logging in at checkout applies group pricing), hence the manual nonce.
+  // Re-price when the cart or sign-in state changes.
   useEffect(() => {
     if (!hydrated) return;
 

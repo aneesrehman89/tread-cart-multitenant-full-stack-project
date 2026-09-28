@@ -20,10 +20,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    // No redirect here. Navigation is the job of a route guard, not of the
-    // fetch helper: this helper also runs on /login and /signup, where a 401
-    // from auth/me is the expected state, and redirecting from here put the
-    // app in an infinite reload loop on exactly those pages.
+    // No redirect on 401 here; route guards handle navigation (redirecting caused a login loop).
     throw new ApiError(body?.error?.message ?? `Request failed (${res.status})`, res.status, body);
   }
 

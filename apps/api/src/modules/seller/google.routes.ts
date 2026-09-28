@@ -8,17 +8,9 @@ import { asyncHandler } from '../../middleware/error.js';
 import { badRequest, unprocessable } from '../../lib/errors.js';
 import { permissionsFor } from '../../middleware/rbac.js';
 import { logger } from '../../lib/logger.js';
+import { smsConfigured } from '../../lib/sms.js';
 
-/**
- * "Continue with Google" for sellers.
- *
- * Standard OAuth 2.0 authorization-code flow. Google has already verified the
- * address, so an account created this way skips email verification entirely —
- * that is the main reason to offer it on a signup wizard.
- *
- * A seller who signs in with Google before being approved lands back on their
- * application; one whose store is live gets a normal seller session.
- */
+// Seller Google sign-in; Google-verified emails skip our email verification.
 export const googleRouter: Router = Router();
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -29,11 +21,7 @@ export function googleConfigured(): boolean {
   return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 }
 
-/**
- * The `state` parameter is signed rather than stored, so the callback can be
- * validated without a server-side session. It carries a nonce and an expiry,
- * which is what actually blocks CSRF on the callback.
- */
+// Signed state (nonce + expiry) guards the callback against CSRF without a server session.
 function signState(): string {
   const payload = Buffer.from(
     JSON.stringify({ nonce: randomBytes(12).toString('hex'), exp: Date.now() + 10 * 60_000 }),
@@ -59,9 +47,9 @@ function verifyState(state: string): boolean {
   }
 }
 
-/** Lets the frontend hide the button when Google is not set up. */
+/** Lets the frontend hide Google sign-in and the phone step when they aren't configured. */
 googleRouter.get('/providers', (_req, res) => {
-  res.json({ google: googleConfigured() });
+  res.json({ google: googleConfigured(), sms: smsConfigured() });
 });
 
 /** Step 1: send the seller to Google. */
@@ -125,10 +113,6 @@ async function exchangeCode(code: string): Promise<GoogleProfile> {
   return (await profileRes.json()) as GoogleProfile;
 }
 
-/**
- * Step 2: Google redirects back here. Resolve the seller and bounce them into
- * the right place in the seller app.
- */
 googleRouter.get(
   '/google/callback',
   asyncHandler(async (req, res) => {
@@ -170,8 +154,7 @@ googleRouter.get(
         },
       });
 
-      // Handed over in the URL once, then immediately swapped for an httpOnly
-      // cookie by the seller app's own callback route.
+      // One-time token, swapped for an httpOnly cookie by the seller app.
       return back(`/auth/google?token=${encodeURIComponent(token)}`);
     }
 
@@ -203,10 +186,7 @@ googleRouter.get(
   }),
 );
 
-/**
- * Exchanges the one-time token from the callback for a session. Called by the
- * seller app's server, which then sets its own httpOnly cookie.
- */
+// Exchanges the one-time callback token for a session.
 googleRouter.post(
   '/google/exchange',
   asyncHandler(async (req, res) => {

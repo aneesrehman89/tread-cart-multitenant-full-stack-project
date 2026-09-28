@@ -7,16 +7,11 @@ import { asyncHandler } from '../../middleware/error.js';
 import { badRequest, conflict, notFound, unprocessable } from '../../lib/errors.js';
 import { isProduction } from '../../config/env.js';
 import { sendMail } from '../../lib/mailer.js';
-import { sendSms } from '../../lib/sms.js';
+import { sendSms, smsConfigured } from '../../lib/sms.js';
 import { verificationEmail } from '../../lib/email-templates.js';
 import { logger } from '../../lib/logger.js';
 
-/**
- * Public seller signup. No authentication: the seller has no account yet and
- * no tenant exists to scope them to. The application sits in the control
- * plane until the platform team approves it, and approval is what provisions
- * the store database (see platform/applications.routes.ts).
- */
+// Public signup; the application waits in the control plane until approval.
 export const sellerSignupRouter: Router = Router();
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
@@ -26,15 +21,7 @@ function generateCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
-/**
- * Codes are echoed back to the client only for channels that did not actually
- * deliver.
- *
- * Keyed on real delivery rather than on "is a provider configured": a
- * configured provider that rejects the send (an unverified Resend domain, a
- * Twilio trial number) would otherwise leave the applicant with no code at
- * all and no way past the step. Never echoed in production.
- */
+// Codes are echoed only when delivery failed, and never in production.
 function exposeCodes(
   emailCode: string,
   phoneCode: string,
@@ -47,10 +34,7 @@ function exposeCodes(
   };
 }
 
-/**
- * Delivery is fire-and-forget from the caller's point of view: a provider
- * outage must not fail a signup, and the seller can always resend.
- */
+// Fire-and-forget: a provider outage must not fail signup.
 async function deliverCodes(opts: {
   email: string;
   name: string;
@@ -75,8 +59,7 @@ async function deliverCodes(opts: {
   return {
     emailSent: mail.delivered,
     smsSent: sms.delivered,
-    // Surfaced so the wizard can explain a provider rejection instead of
-    // silently showing a code with no reason.
+    // Lets the wizard explain a provider rejection.
     ...(mail.error ? { emailError: mail.error } : {}),
   };
 }
@@ -124,8 +107,7 @@ sellerSignupRouter.post(
       phoneVerifiedAt: null,
     };
 
-    // Restarting a draft replaces it rather than erroring, so an abandoned
-    // signup does not permanently block the address.
+    // Restarting replaces the draft so an abandoned signup doesn't block the email.
     const application = existing
       ? await controlDb.sellerApplication.update({ where: { id: existing.id }, data })
       : await controlDb.sellerApplication.create({ data });
@@ -252,8 +234,7 @@ sellerSignupRouter.patch(
     const body = storeSchema.parse(req.body);
     const slug = body.storeSlug.toLowerCase();
 
-    // The slug becomes the tenant slug and its database name, so it has to be
-    // free against live stores and other pending applications alike.
+    // Slug becomes the tenant slug and DB name, so it must be globally free.
     if (await controlDb.tenant.findUnique({ where: { slug } })) {
       throw conflict(`The store address "${slug}" is already taken`);
     }
@@ -302,9 +283,10 @@ sellerSignupRouter.post(
 
     const missing: string[] = [];
     if (!application.emailVerifiedAt) missing.push('email verification');
-    // Google accounts have no phone until the seller adds one, and Google has
-    // already proved the email, so phone verification only gates local signups.
-    if (application.phone && !application.phoneVerifiedAt) missing.push('phone verification');
+    // Phone verification applies only when SMS is configured, and never to Google signups.
+    if (smsConfigured() && !application.googleId && application.phone && !application.phoneVerifiedAt) {
+      missing.push('phone verification');
+    }
     if (!application.storeName || !application.storeSlug) missing.push('store page');
     if (!application.legalName || !application.taxId) missing.push('business details');
 

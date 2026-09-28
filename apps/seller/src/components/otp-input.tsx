@@ -2,16 +2,7 @@
 
 import { useRef } from 'react';
 
-/**
- * Six-box verification code input.
- *
- * Focus is moved through refs rather than `nextElementSibling`: React
- * re-renders on every keystroke, and reaching into the DOM mid-render loses
- * the focus again, so only the first digit would ever land.
- *
- * Any box also accepts a whole pasted or typed code and spreads it across the
- * boxes, which is what people actually do with a code from an SMS.
- */
+// Focus is moved via refs; pasting a full code fills every box.
 export function OtpInput({
   length = 6,
   value,

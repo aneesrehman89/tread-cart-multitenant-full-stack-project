@@ -2,19 +2,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
 
-/**
- * Outbound email.
- *
- * Three backends, chosen by what is configured:
- *   - `resend`  — HTTP API, only needs an API key. Easiest to set up.
- *   - `smtp`    — any SMTP server, including Gmail with an app password.
- *   - `log`     — no provider configured: the message is written to the log
- *                 and `delivered` comes back false.
- *
- * The `log` backend is deliberately not silent-success. Callers check
- * `delivered` so the UI can stop claiming "we sent you an email" when nothing
- * actually left the building.
- */
+// Backend is resend, smtp, or log. The log backend returns delivered=false so the UI never claims a send.
 
 export type MailBackend = 'resend' | 'smtp' | 'log';
 
@@ -102,8 +90,7 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
     logger.info({ to: mail.to, subject: mail.subject, backend }, 'email sent');
     return { delivered: true, backend };
   } catch (err) {
-    // A failed send must never take down the request that triggered it —
-    // a signup should not fail because the mail provider is down.
+    // A mail failure must never fail the calling request.
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ err, to: mail.to, backend }, 'email send failed');
     return { delivered: false, backend, error: message };

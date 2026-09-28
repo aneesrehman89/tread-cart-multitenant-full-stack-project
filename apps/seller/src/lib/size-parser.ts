@@ -1,12 +1,4 @@
-/**
- * Parses the size string a fitter actually types into the structured columns
- * the catalog filters on.
- *
- * Asking for section width, aspect ratio and rim diameter as three separate
- * numbers is how a database thinks, not how a tire shop does. One field that
- * understands "225/45R17" is both faster to fill and harder to get wrong,
- * and the parsed parts still drive the fitment filters.
- */
+// Parses a typed size (e.g. 225/45R17) into the structured columns used by filters.
 
 export interface TireSize {
   sectionWidthMm: number;
@@ -41,10 +33,7 @@ export function parseTireSize(input: string): TireSize | null {
   return { sectionWidthMm, aspectRatio, rimDiameterIn };
 }
 
-/**
- * Accepts 18x8.5, 18x8.5 5x114.3, 18x8.5 5x114.3 ET35, and ET-12 for a
- * negative offset.
- */
+// Accepts 18x8.5, 18x8.5 5x114.3, 18x8.5 5x114.3 ET35 (ET-12 for negative offset).
 export function parseWheelSize(input: string): WheelSize | null {
   const cleaned = input.trim().toUpperCase().replace(/×/g, 'X');
 
@@ -56,8 +45,7 @@ export function parseWheelSize(input: string): WheelSize | null {
   if (rimDiameterIn < 12 || rimDiameterIn > 30) return null;
   if (wheelWidthIn < 4 || wheelWidthIn > 16) return null;
 
-  // Bolt pattern: the SECOND NxN in the string, so it is never confused with
-  // the leading diameter x width.
+  // The bolt pattern is the second NxN match.
   const rest = cleaned.slice(size[0].length);
   const bolt = rest.match(/(\d)\s*X\s*(\d{2,3}(?:\.\d)?)/);
   const offset = rest.match(/ET\s*(-?\d{1,3})/);

@@ -37,13 +37,7 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-/**
- * Loads the store's identity and the shopper's session once for the whole
- * app, and paints the store's theme onto the page.
- *
- * Both were previously refetched by the header on every navigation, which put
- * two round trips in front of each screen's own data.
- */
+// Loads the store and session once and applies the store theme.
 export function StoreProvider({ children }: { children: ReactNode }) {
   const home = useApi<{ store: Store }>('home');
   const me = useApi<Shopper>('auth/me');

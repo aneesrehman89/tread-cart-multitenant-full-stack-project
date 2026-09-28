@@ -10,17 +10,14 @@ import { PasswordInput } from '@/components/password-input';
 import { Button, Card, Field, Pill, inputClass } from '@/components/ui';
 import { GoogleButton } from '@/components/google-button';
 
-/**
- * Seller signup. Each step writes to the API before advancing, so a half
- * finished application survives a refresh and the platform team can see
- * exactly how far someone got.
- */
+// Each step saves to the API, so progress survives a refresh.
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [applicationId, setApplicationId] = useState<string | null>(null);
-  const providers = useApi<{ google: boolean }>('auth/providers');
+  const providers = useApi<{ google: boolean; sms: boolean }>('auth/providers');
+  const smsOn = providers.data?.sms ?? false;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -58,8 +55,7 @@ export default function SignupPage() {
     country: 'PK',
   });
 
-  // Coming back from Google: the API created the application and verified the
-  // email already, so drop the seller straight into the store page step.
+  // Returning from Google with the email already verified: skip to the store step.
   useEffect(() => {
     const fromGoogle = searchParams.get('application');
     const oauthError = searchParams.get('error');
@@ -78,8 +74,6 @@ export default function SignupPage() {
           phone: a.phone ?? '',
         }));
         setEmailVerified(!!a.emailVerifiedAt);
-        // Google proves the email, and no phone was collected, so neither
-        // verification is outstanding — go straight to the store page.
         setPhoneVerified(true);
         setStep(1);
       })
@@ -162,12 +156,7 @@ export default function SignupPage() {
 
   const [submitting, setSubmitting] = useState(false);
 
-  /**
-   * Submission deliberately does not clear its busy state on success: the
-   * status page is a separate route, and dropping the spinner the instant the
-   * request resolves left the button looking idle while the navigation was
-   * still in flight.
-   */
+  // Keep the spinner until navigation completes.
   async function submit() {
     setSubmitting(true);
     setError(null);
@@ -283,7 +272,7 @@ export default function SignupPage() {
               </Button>
             ) : (
               <>
-                {/* Phone verification */}
+                {smsOn && (
                 <div className="mt-8 border-t border-ink-200 pt-6">
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-ink-900">Verify your phone number</h2>
@@ -310,6 +299,7 @@ export default function SignupPage() {
                     <DevCode label="SMS code" code={codes.phone} />
                   )}
                 </div>
+                )}
 
                 {/* Email verification */}
                 <div className="mt-6 border-t border-ink-200 pt-6">
@@ -346,7 +336,7 @@ export default function SignupPage() {
                 </div>
 
                 <div className="mt-8 flex justify-end">
-                  <Button onClick={() => setStep(1)} disabled={!emailVerified || !phoneVerified}>
+                  <Button onClick={() => setStep(1)} disabled={!emailVerified || (smsOn && !phoneVerified)}>
                     Continue
                   </Button>
                 </div>

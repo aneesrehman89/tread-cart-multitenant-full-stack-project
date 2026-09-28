@@ -13,19 +13,7 @@ export interface ResolvedPrice {
   reason: 'base' | 'group-sku-fixed' | 'group-sku-discount' | 'group-default-discount';
 }
 
-/**
- * Resolution order for one SKU and one customer group:
- *
- *   1. CustomerGroupPrice row for (group, sku) with the highest minQuantity
- *      that the requested quantity satisfies, and inside its active window.
- *        a. priceCents set   -> fixed price, wins outright
- *        b. discountBps set  -> percentage off the SKU base price
- *   2. The group's defaultDiscountBps
- *   3. The SKU base price
- *
- * A customer belongs to at most one group in this schema; when that becomes
- * many-to-many, sort candidate groups by `priority` and take the first.
- */
+// Resolution: group SKU price (fixed, else % off) for the best qty tier, then group default discount, then base price.
 export async function resolvePrice(
   db: TenantPrismaClient,
   tenantSlug: string,
@@ -118,11 +106,7 @@ export async function resolvePrices(
   );
 }
 
-/**
- * Called after any pricing write. Group and tier caches are keyed by group, so
- * dropping the group prefix is enough; catalog listings embed prices, so those
- * go too.
- */
+// Drop group and catalog caches after any pricing write.
 export async function invalidatePricing(tenantSlug: string, groupId?: string): Promise<void> {
   await Promise.all([
     invalidatePrefix(tenantKey(tenantSlug, 'grouprice', groupId ?? '')),

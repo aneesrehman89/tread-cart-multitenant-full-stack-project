@@ -7,17 +7,10 @@ import { cached, defaultTtl, tenantKey } from '../../cache/cache.js';
 import { optionalCustomer, requireCustomer, shopAuthRouter } from './shop.auth.js';
 import { checkoutRouter } from './checkout.routes.js';
 
-/**
- * The public storefront API.
- *
- * Runs inside the tenant middleware, so it is scoped by X-Tenant-Slug or the
- * storefront's hostname — unlike the seller dashboard, the caller here IS the
- * store's own frontend, so a header is the right source of truth.
- */
+// Tenant comes from X-Tenant-Slug or hostname; the caller is the store's own frontend.
 export const shopRouter: Router = Router();
 
-// Every storefront route may be called by a guest or a signed-in shopper, and
-// which one changes the prices, so the session is resolved up front.
+// Resolve the shopper session up front since it affects pricing.
 shopRouter.use(optionalCustomer);
 
 shopRouter.use('/auth', shopAuthRouter);
@@ -184,8 +177,7 @@ shopRouter.get(
     });
     if (!product) throw notFound('Product not found');
 
-    // Same type, same brand — a reasonable "you may also like" without a
-    // recommendation engine.
+    // Same type and brand as a simple 'you may also like'.
     const related = await db.product.findMany({
       where: { isActive: true, type: product.type, id: { not: product.id } },
       include: { brand: true, skus: { take: 1, orderBy: { basePriceCents: 'asc' } } },

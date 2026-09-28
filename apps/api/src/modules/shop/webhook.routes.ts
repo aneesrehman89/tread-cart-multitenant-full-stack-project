@@ -6,17 +6,7 @@ import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
 import { markOrderPaid, stripe } from './checkout.routes.js';
 
-/**
- * Stripe webhook.
- *
- * Mounted with express.raw() before the JSON parser, because Stripe signs the
- * exact bytes it sent — parsing and re-serialising the body would invalidate
- * the signature.
- *
- * This route resolves its own tenant from the event metadata rather than a
- * header: Stripe does not know about tenants, and the request is not a
- * browser session.
- */
+// Raw body (mounted before express.json) for signature checks; tenant comes from event metadata.
 export async function stripeWebhookHandler(req: Request, res: Response): Promise<void> {
   if (!stripe) {
     res.status(503).json({ error: 'Stripe is not configured' });
@@ -59,8 +49,7 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
 
   const db = await getTenantClient(tenant.id, tenant.databaseUrl);
 
-  // Idempotency gate: inserting the event id is what claims the work. Stripe
-  // retries and can deliver out of order, so this has to be the first write.
+  // Inserting the event id first makes processing idempotent.
   try {
     await db.processedWebhook.create({ data: { id: event.id, type: event.type } });
   } catch {

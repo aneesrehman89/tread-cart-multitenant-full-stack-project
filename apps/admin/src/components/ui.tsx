@@ -294,14 +294,7 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
 
 // --- charts ---------------------------------------------------------------
 
-/**
- * GMV trend as a line with a soft area fill. Inline SVG rather than a chart
- * library: it is one series, and a dependency would cost more than it saves.
- *
- * The SVG uses a fixed viewBox and `preserveAspectRatio="none"` so it stretches
- * to the container; stroke widths are therefore set in a non-scaling way via
- * vector-effect so the line does not distort with the container width.
- */
+// Single-series SVG chart; vector-effect keeps strokes crisp when stretched.
 export function LineChart({ points }: { points: { date: string; cents: number }[] }) {
   const [hover, setHover] = useState<number | null>(null);
 

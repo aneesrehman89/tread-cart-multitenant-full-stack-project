@@ -70,8 +70,7 @@ export default function SupportPage() {
   const assignees = useApi<{ assignees: Assignee[] }>(ready ? 'support/assignees' : null);
   const me = useApi<{ id: string; name: string }>(ready ? 'auth/me' : null);
 
-  // Keep a ticket selected whenever the queue is non-empty, and drop the
-  // selection when the current filter no longer contains it.
+  // Keep a ticket selected while the filtered queue is non-empty.
   useEffect(() => {
     if (!list.data) return;
     const stillVisible = list.data.tickets.some((t) => t.id === selectedId);
@@ -222,8 +221,7 @@ function TicketThread({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Clear the draft when switching to another ticket, so a half-typed reply
-  // cannot be sent to the wrong customer.
+  // Reset the draft on ticket switch so a reply can't go to the wrong customer.
   useEffect(() => {
     setReply('');
     setActionError(null);

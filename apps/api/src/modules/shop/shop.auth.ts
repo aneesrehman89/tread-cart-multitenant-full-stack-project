@@ -7,13 +7,7 @@ import { asyncHandler } from '../../middleware/error.js';
 import { requireTenantContext } from '../../middleware/tenant.js';
 import { conflict, notFound, unauthorized } from '../../lib/errors.js';
 
-/**
- * Storefront customer accounts.
- *
- * Customers belong to one store and live in that store's own database, so
- * their sessions do too. The same address can be a customer of two different
- * stores without those accounts being related in any way.
- */
+// Customers and their sessions live in each store's own DB.
 export const shopAuthRouter: Router = Router();
 
 const COOKIE = 'tc_shopper_session';
@@ -112,8 +106,7 @@ shopAuthRouter.post(
       throw conflict('An account already exists for that email. Sign in instead.');
     }
 
-    // A customer row may already exist from a guest order; this claims it
-    // rather than failing, so their order history carries over.
+    // Claim an existing guest row so order history carries over.
     const customer = existing
       ? await db.customer.update({
           where: { id: existing.id },

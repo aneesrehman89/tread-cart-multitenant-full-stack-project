@@ -11,10 +11,7 @@ import type { StaffRole } from '../../generated/control/index.js';
 
 export const sellerStaffRouter: Router = Router();
 
-/**
- * Roles a store may assign. PLATFORM_ADMIN is deliberately absent: a store
- * must not be able to mint an account with cross-tenant access.
- */
+// PLATFORM_ADMIN excluded so stores can't mint cross-tenant accounts.
 const STORE_ROLES = [
   'TENANT_OWNER',
   'TENANT_ADMIN',
@@ -151,8 +148,7 @@ sellerStaffRouter.patch(
       throw badRequest('You cannot deactivate your own account');
     }
 
-    // A store must always keep at least one active owner, or nobody can
-    // manage staff or billing again without platform intervention.
+    // A store must always keep at least one active owner.
     const losingOwner =
       target.role === 'TENANT_OWNER' &&
       ((body.role && body.role !== 'TENANT_OWNER') || body.isActive === false);
@@ -177,8 +173,7 @@ sellerStaffRouter.patch(
       select: { id: true, name: true, email: true, role: true, isActive: true },
     });
 
-    // Deactivating or demoting must take effect now, not when the cached
-    // session entry happens to expire.
+    // Invalidate cached sessions so the change applies immediately.
     if (body.isActive === false || body.role) {
       const sessions = await controlDb.session.findMany({
         where: { staffUserId: target.id, revokedAt: null },

@@ -4,10 +4,7 @@ import { fanout } from '../../db/fanout.js';
 import { asyncHandler } from '../../middleware/error.js';
 import { cached } from '../../cache/cache.js';
 
-/**
- * Cross-store views: the same entities the store detail tabs show, but merged
- * across every tenant. Each one is a fan-out, so results are cached briefly.
- */
+// Cross-tenant fan-out views, cached briefly.
 export const globalRouter: Router = Router();
 
 const searchQuery = z.object({ q: z.string().optional() });

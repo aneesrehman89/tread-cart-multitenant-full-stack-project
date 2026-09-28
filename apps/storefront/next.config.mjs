@@ -3,8 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   env: {
     TREADCART_API_URL: process.env.TREADCART_API_URL ?? 'http://localhost:4000',
-    // Which store this storefront serves. In production the API resolves the
-    // tenant from the hostname instead.
+    // Dev-only tenant; production resolves by hostname.
     TREADCART_STORE: process.env.TREADCART_STORE ?? 'apexauto',
     // Public: the browser navigates here directly for OAuth redirects.
     NEXT_PUBLIC_API_URL: process.env.TREADCART_API_URL ?? 'http://localhost:4000',

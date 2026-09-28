@@ -3,13 +3,7 @@
 import { useId, useState } from 'react';
 import { inputClass } from './ui';
 
-/**
- * Password field with a reveal toggle.
- *
- * Typing a password you cannot see, twice, is the single easiest thing to get
- * wrong in a signup form. The toggle is a real button so it is reachable by
- * keyboard, and it announces its state rather than relying on the icon alone.
- */
+// Password input with an accessible show/hide toggle.
 export function PasswordInput({
   value,
   onChange,

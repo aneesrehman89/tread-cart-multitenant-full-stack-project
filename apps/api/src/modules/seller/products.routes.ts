@@ -49,9 +49,7 @@ sellerProductsRouter.get(
       orderBy: { name: 'asc' },
     });
 
-    // Stock state is per-SKU, then rolled up. Summing first was wrong: a
-    // product with one sold-out size and one well-stocked size read as "in
-    // stock", so the LOW and OUT filters never surfaced it.
+    // Stock state is per SKU, then rolled up, so one sold-out size still shows as LOW/OUT.
     const rows = products
       .map((p) => {
         const perSku = p.skus.map((sku) => {
@@ -224,8 +222,7 @@ sellerProductsRouter.delete(
     });
     if (!existing) throw notFound('Product not found');
 
-    // A product that has been ordered is hidden, not deleted: removing it
-    // would break the order history that references its SKUs.
+    // Ordered products are hidden, not deleted, to keep order history intact.
     const hasOrders = existing.skus.some((s) => s.orderItems.length > 0);
     if (hasOrders) {
       await db.product.update({ where: { id: existing.id }, data: { isActive: false } });

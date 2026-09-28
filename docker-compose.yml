@@ -33,10 +33,6 @@ services:
       retries: 20
 
   # S3-compatible storage for local dev. Swap for real Amazon S3 in staging/prod
-  # by pointing S3_ENDPOINT at AWS and dropping S3_FORCE_PATH_STYLE.
-  # Optional: only starts with `docker compose --profile storage up -d`.
-  # If your network cannot pull the MinIO image, point S3_* at real AWS S3
-  # instead; nothing in the core skeleton needs this container.
   minio:
     profiles: ["storage"]
     image: minio/minio:latest

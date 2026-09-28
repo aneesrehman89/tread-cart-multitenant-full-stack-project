@@ -20,10 +20,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    // Deliberately no redirect on 401. A shopper browses the whole catalogue
-    // signed out, so `auth/me` returning 401 is the normal guest state, not a
-    // session expiry — bouncing them to a sign-in page would break browsing.
-    // Screens that need an account handle 401 themselves.
+    // No redirect on 401: guests browse signed out.
     throw new ApiError(body?.error?.message ?? `Request failed (${res.status})`, res.status, body);
   }
 

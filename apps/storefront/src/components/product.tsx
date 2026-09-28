@@ -120,13 +120,7 @@ export function specLabel(type: string, s: Product['skus'][number]): string {
   return s.sku;
 }
 
-/**
- * Product photography, falling back to a drawn glyph.
- *
- * Plain <img> rather than next/image: catalog images are arbitrary remote
- * URLs a seller supplies, and next/image would need every one of those hosts
- * allow-listed at build time.
- */
+// Plain <img> because seller image hosts can't be allow-listed for next/image.
 export function ProductImageBox({
   product,
   className = '',

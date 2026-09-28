@@ -1,14 +1,4 @@
-/**
- * Store theming.
- *
- * A store controls colour, typeface and the shape/weight of its controls.
- * Structure, spacing and the type *scale* stay fixed across every store —
- * that is what makes this a white-label system rather than a page builder,
- * and it is why a badly configured store still looks like TreadCart.
- *
- * Everything is applied as CSS custom properties on <html>, so a theme change
- * repaints without re-rendering the React tree.
- */
+// Stores control colour, font and control style via CSS variables; layout and type scale stay fixed.
 
 export interface StoreTheme {
   brandPrimary: string;

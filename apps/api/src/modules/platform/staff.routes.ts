@@ -71,8 +71,7 @@ staffRouter.post(
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
 
-    // The two are mutually exclusive by definition: a platform admin is not
-    // scoped to a store, and every other role must be.
+    // Platform admins have no tenant; every other role must have one.
     if (body.role === 'PLATFORM_ADMIN' && body.tenantSlug) {
       throw badRequest('A platform admin cannot be scoped to a store');
     }

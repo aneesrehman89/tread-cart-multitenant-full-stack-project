@@ -2,11 +2,7 @@ import { redis } from './redis.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 
-/**
- * Every cache key is prefixed with the tenant slug. Nothing can read another
- * tenant's cached value even if a key name collides, which matters because the
- * databases are isolated but Redis is shared.
- */
+// Keys are tenant-prefixed because Redis is shared across tenants.
 export function tenantKey(tenantSlug: string, ...parts: (string | number)[]): string {
   return `t:${tenantSlug}:${parts.join(':')}`;
 }
@@ -36,11 +32,7 @@ export async function cached<T>(
   return value;
 }
 
-/**
- * Write-through: persist first, then immediately refresh the cache with the
- * value we just wrote, so the next read does not have to touch the database
- * and no window exists where the cache serves the pre-write value.
- */
+// Write-through: persist, then refresh the cache with the written value.
 export async function writeThrough<T>(
   key: string,
   ttlSeconds: number,
@@ -57,10 +49,7 @@ export async function writeThrough<T>(
   return value;
 }
 
-/**
- * Drop every key under a prefix. Uses SCAN + UNLINK rather than KEYS so a large
- * tenant namespace does not block the Redis event loop.
- */
+// SCAN + UNLINK instead of KEYS to avoid blocking Redis.
 export async function invalidatePrefix(prefix: string): Promise<number> {
   let cursor = '0';
   let removed = 0;

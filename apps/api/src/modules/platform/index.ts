@@ -10,13 +10,7 @@ import { staffRouter } from './staff.routes.js';
 import { globalRouter } from './global.routes.js';
 import { applicationsRouter } from './applications.routes.js';
 
-/**
- * The platform control plane.
- *
- * Mounted before the tenant middleware, so none of these routes resolve a
- * tenant from the request. They read across every tenant instead, which is
- * why each one is gated on PLATFORM_ADMIN.
- */
+// Cross-tenant routes, all gated on PLATFORM_ADMIN.
 export const platformRouter: Router = Router();
 
 // Auth handles its own gating: /login must stay reachable while signed out.

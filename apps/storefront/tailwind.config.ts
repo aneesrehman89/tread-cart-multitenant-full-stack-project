@@ -1,13 +1,6 @@
 import type { Config } from 'tailwindcss';
 
-/**
- * Tokens lifted from the design system in `UI's/1- user-customized-theaming.png`:
- * a deep forest-green brand ramp, a lime accent, green-tinted neutrals, and
- * semantic colours kept distinct from the brand so order status stays legible.
- *
- * `brand` here is the platform console's own chrome. Individual stores override
- * their storefront colours through Tenant.brandPrimary / brandAccent.
- */
+// Platform chrome palette; stores override brand colours via Tenant.brandPrimary / brandAccent.
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {

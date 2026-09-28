@@ -5,11 +5,7 @@ import { hashToken } from '../lib/tokens.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import type { AuthenticatedActor } from '../types/express.js';
 
-/**
- * Sessions are cached in Redis keyed by the token hash so the hot path is one
- * Redis GET instead of a control-DB round trip. Revocation deletes the key and
- * stamps the row, so a revoked token dies on the next request either way.
- */
+// Sessions cached in Redis by token hash; revocation deletes the key.
 const SESSION_CACHE_TTL = 120;
 
 const sessionKey = (tokenHash: string) => `session:${tokenHash}`;
@@ -18,9 +14,7 @@ function readBearerToken(req: Request): string | null {
   const header = req.header('authorization');
   if (header?.startsWith('Bearer ')) return header.slice(7).trim();
 
-  // Browser clients use an httpOnly cookie instead of a header. The platform
-  // console uses its own cookie name so signing into a store does not also
-  // sign you into the platform console in the same browser.
+  // Browsers send an httpOnly cookie; the platform console uses its own cookie name.
   const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
   return cookies?.tc_platform_session ?? cookies?.tc_session ?? null;
 }
@@ -73,8 +67,7 @@ export async function requireAuth(
     const actor = await loadActor(hashToken(token));
     if (!actor) throw unauthorized('Session is invalid or has expired');
 
-    // A tenant-scoped user may never act on another tenant, whatever the
-    // request said its tenant was. Platform admins are exempt by design.
+    // Tenant-scoped users can never act on another tenant.
     if (actor.tenantId && req.tenant && actor.tenantId !== req.tenant.id) {
       throw forbidden('This session does not belong to the requested tenant');
     }
