@@ -1,12 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ErrorNote, Loading } from '@/components/ui';
 
-// Swaps the one-time callback token for an httpOnly cookie.
 export default function GoogleCallbackPage() {
+  return (
+    <Suspense fallback={<Loading label="Finishing sign-in" />}>
+      <Callback />
+    </Suspense>
+  );
+}
+
+// Swaps the one-time callback token for an httpOnly cookie.
+function Callback() {
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 

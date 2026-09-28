@@ -1,17 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, useApi } from '@/lib/api';
 import { Stepper } from '@/components/stepper';
 import { OtpInput } from '@/components/otp-input';
 import { PasswordInput } from '@/components/password-input';
-import { Button, Card, Field, Pill, inputClass } from '@/components/ui';
+import { Button, Card, Field, Loading, Pill, inputClass } from '@/components/ui';
 import { GoogleButton } from '@/components/google-button';
 
-// Each step saves to the API, so progress survives a refresh.
 export default function SignupPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <SignupWizard />
+    </Suspense>
+  );
+}
+
+// Each step saves to the API, so progress survives a refresh.
+function SignupWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep] = useState(0);

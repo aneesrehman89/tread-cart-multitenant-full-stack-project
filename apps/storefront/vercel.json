@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npx --yes pnpm@11.24.0 install --frozen-lockfile --filter @treadcart/storefront...",
+  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ../../pnpm-lock.yaml ../../pnpm-workspace.yaml ../../package.json"
+}

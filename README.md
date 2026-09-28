@@ -104,6 +104,14 @@ Database access: `localhost:5433`, user/password `treadcart`.
 docker exec -it treadcart-postgres psql -U treadcart -d treadcart_t_apexauto -c "\dt"
 ```
 
+## Deployment
+
+- **Frontends → Vercel.** Three Vercel projects on this one repo, Root Directory `apps/admin`, `apps/seller`, `apps/storefront`. Each app's `vercel.json` pins pnpm, installs only that app's dependencies, and skips the build when the push didn't touch the app or the shared lockfile/workspace files.
+- **API → a long-running host** (e.g. Railway) with Postgres and Redis. It can't run on Vercel: it keeps per-tenant connection pools and creates databases at runtime.
+  - Build: `NODE_ENV=development pnpm install --frozen-lockfile --filter @treadcart/api... && pnpm --filter @treadcart/api db:generate && pnpm --filter @treadcart/api build`
+  - Start: `pnpm --filter @treadcart/api db:deploy && pnpm --filter @treadcart/api start`
+- **Frontend env:** `TREADCART_API_URL` (all three), `TREADCART_STORE` (storefront). Both are read at build time, so redeploy after changing them. Unset locally, they default to `http://localhost:4000` and `apexauto`.
+
 ## Known gaps
 
 - `provision-tenant.ts` uses `prisma db push`; switch to `migrate deploy` for production.

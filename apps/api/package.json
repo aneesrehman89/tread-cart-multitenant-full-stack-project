@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/generated','dist/generated',{recursive:true})\"",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "db:generate": "node scripts/with-env.mjs generate --schema prisma/control/schema.prisma && node scripts/with-env.mjs generate --schema prisma/tenant/schema.prisma",
@@ -30,6 +30,7 @@
     "nodemailer": "^10.0.10",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
+    "prisma": "^6.2.1",
     "stripe": "^17.5.0",
     "zod": "^3.24.1"
   },
@@ -40,7 +41,6 @@
     "@types/node": "^22.10.5",
     "@types/nodemailer": "^8.0.2",
     "pino-pretty": "^13.0.0",
-    "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
