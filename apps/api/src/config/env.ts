@@ -26,6 +26,8 @@ const schema = z.object({
   TENANT_DB_PORT: z.coerce.number().int().positive().default(5433),
   TENANT_DB_USER: z.string(),
   TENANT_DB_PASSWORD: z.string(),
+  // e.g. 'require' for managed Postgres (Aiven, Neon); empty for local Docker.
+  TENANT_DB_SSLMODE: z.enum(['', 'disable', 'prefer', 'require']).default(''),
   TENANT_POOL_MAX_CLIENTS: z.coerce.number().int().positive().default(25),
   TENANT_POOL_IDLE_MS: z.coerce.number().int().positive().default(300_000),
 

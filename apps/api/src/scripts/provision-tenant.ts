@@ -23,7 +23,8 @@ function arg(name: string): string | undefined {
 function tenantDatabaseUrl(databaseName: string): string {
   const user = encodeURIComponent(env.TENANT_DB_USER);
   const pass = encodeURIComponent(env.TENANT_DB_PASSWORD);
-  return `postgresql://${user}:${pass}@${env.TENANT_DB_HOST}:${env.TENANT_DB_PORT}/${databaseName}?schema=public`;
+  const ssl = env.TENANT_DB_SSLMODE ? `&sslmode=${env.TENANT_DB_SSLMODE}` : '';
+  return `postgresql://${user}:${pass}@${env.TENANT_DB_HOST}:${env.TENANT_DB_PORT}/${databaseName}?schema=public${ssl}`;
 }
 
 export async function provisionTenant(opts: {
